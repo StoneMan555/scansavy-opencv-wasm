@@ -37,7 +37,7 @@ args=(
   "--build_wasm"
   "--disable_single_file"
   "--config" "$CONFIG"
-  "--cmake_option=-DBUILD_LIST=core,imgproc,features2d,calib3d,video"
+  "--cmake_option=-DBUILD_LIST=core,imgproc,features2d,calib3d,video,js"
   "--cmake_option=-DBUILD_opencv_world=OFF"
   "--cmake_option=-DBUILD_EXAMPLES=OFF"
   "--cmake_option=-DBUILD_TESTS=OFF"

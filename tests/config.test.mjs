@@ -15,7 +15,7 @@ test("OpenCV.js config exports ScanSavvy relocalization primitives", () => {
 
 test("Build script keeps module list lean", () => {
   const script = readFileSync(join(root, "scripts", "build-opencv-js.sh"), "utf8");
-  assert.match(script, /BUILD_LIST=core,imgproc,features2d,calib3d,video/);
+  assert.match(script, /BUILD_LIST=core,imgproc,features2d,calib3d,video,js/);
   assert.doesNotMatch(script, /BUILD_LIST=.*dnn/);
   assert.doesNotMatch(script, /BUILD_LIST=.*objdetect/);
 });

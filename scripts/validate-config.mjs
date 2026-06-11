@@ -19,7 +19,7 @@ const required = [
   "solvePnPRansac",
   "solvePnPRefineLM",
   "projectPoints",
-  "BUILD_LIST=core,imgproc,features2d,calib3d,video",
+  "BUILD_LIST=core,imgproc,features2d,calib3d,video,js",
 ];
 
 const buildScript = readFileSync(join(root, "scripts", "build-opencv-js.sh"), "utf8");
