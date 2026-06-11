@@ -1,0 +1,48 @@
+name: Build ScanSavvy OpenCV WASM
+
+on:
+  workflow_dispatch:
+    inputs:
+      opencv_ref:
+        description: OpenCV git tag or ref
+        default: "4.13.0"
+        required: true
+      build_flavor:
+        description: basic, simd, threads, or simd-threads
+        default: "simd"
+        required: true
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm test
+
+  build-wasm:
+    runs-on: ubuntu-latest
+    needs: validate
+    container:
+      image: emscripten/emsdk:3.1.64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm test
+      - name: Build WASM
+        env:
+          OPENCV_REF: ${{ inputs.opencv_ref || '4.13.0' }}
+          BUILD_FLAVOR: ${{ inputs.build_flavor || 'simd' }}
+        run: bash scripts/build-opencv-js.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scansavy-opencv-wasm
+          path: dist/
+

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": "scansavy.opencv-wasm.upstreams.v0",
+  "opencv": {
+    "repo": "https://github.com/opencv/opencv.git",
+    "ref": "4.13.0",
+    "reason": "OpenCV.js exports solvePnPRansac, solvePnPRefineLM, projectPoints, ORB, AKAZE, BFMatcher, and optical flow."
+  },
+  "opencvMobile": {
+    "repo": "https://github.com/nihui/opencv-mobile.git",
+    "release": "v35",
+    "reason": "Lean mobile/WebAssembly build reference. Stock package excludes calib3d/opencv_js, so this repo borrows the build philosophy rather than consuming it directly."
+  },
+  "emscripten": {
+    "dockerImage": "emscripten/emsdk:3.1.64",
+    "reason": "Known stable Emscripten baseline for OpenCV.js style builds."
+  }
+}
+
