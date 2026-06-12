@@ -50,3 +50,40 @@ Recommended acceptance fields for production:
 - scene-cell or spatial bucket id
 - optional vocabulary/BoW cluster for fast lookup
 
+## XFeat + LighterGlue Sidecar
+
+The high-quality browser runtime uses a separate sidecar so it does not confuse ORB/AKAZE binary descriptors with learned XFeat descriptors:
+
+```json
+{
+  "schemaVersion": "scansavy.mappack.xfeat-lg.v0",
+  "descriptorMode": "xfeat-lg-v0",
+  "descriptorDim": 64,
+  "descriptorFormat": "float16",
+  "cameraModel": { "fx": 0, "fy": 0, "cx": 0, "cy": 0, "width": 0, "height": 0 },
+  "keyframes": [
+    {
+      "id": "kf-000144",
+      "width": 640,
+      "height": 360,
+      "assets": {
+        "keypoints": "xfeat/kf-000144.keypoints.f32",
+        "descriptors": "xfeat/kf-000144.descriptors.f16",
+        "scores": "xfeat/kf-000144.scores.f32",
+        "landmarks": "xfeat/kf-000144.landmarks.f32",
+        "landmarkIds": "xfeat/kf-000144.landmark-ids.json"
+      }
+    }
+  ]
+}
+```
+
+Binary payload conventions:
+
+- `keypoints`: `Float32Array`, `[x, y]` pairs in keyframe pixel coordinates.
+- `descriptors`: `Float16Array` on disk when possible, expanded to float32 before ONNX Runtime input.
+- `scores`: optional `Float32Array`, one confidence per keypoint.
+- `landmarks`: `Float32Array`, `[x, y, z]` MapPack coordinates aligned by index with descriptors.
+- `landmarkIds`: optional JSON array aligned by index.
+
+The sidecar may inline arrays for smoke tests, but production MapPacks should use binary payloads to avoid large JSON parse cost on Android Chrome.

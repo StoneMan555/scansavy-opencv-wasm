@@ -1,4 +1,5 @@
 export type DescriptorMode = "compact-brief-v1" | "orb-32" | "akaze";
+export type RelocalizationDescriptorMode = DescriptorMode | "xfeat-lg-v0";
 
 export interface ScanSavvyCameraModel {
   fx: number;
@@ -7,6 +8,8 @@ export interface ScanSavvyCameraModel {
   cy: number;
   width?: number;
   height?: number;
+  distortion?: number[];
+  distCoeffs?: number[];
 }
 
 export interface ScanSavvyReferenceFeature {
@@ -44,9 +47,39 @@ export interface ScanSavvyFrameInput {
   imageData: ImageData;
 }
 
+export interface ScanSavvyXFeatMapPackSidecar {
+  schemaVersion: "scansavy.mappack.xfeat-lg.v0";
+  descriptorMode: "xfeat-lg-v0";
+  descriptorDim: 64;
+  descriptorFormat?: "float16" | "float32" | "uint16-normalized";
+  cameraModel: ScanSavvyCameraModel;
+  keyframes: ScanSavvyXFeatMapPackKeyframe[];
+}
+
+export interface ScanSavvyXFeatMapPackKeyframe {
+  id: string;
+  width: number;
+  height: number;
+  cameraModel?: ScanSavvyCameraModel;
+  descriptorDim?: 64;
+  descriptorFormat?: "float16" | "float32" | "uint16-normalized";
+  keypoints?: number[] | number[][];
+  descriptors?: number[] | number[][];
+  scores?: number[];
+  landmarks?: number[] | number[][];
+  landmarkIds?: Array<string | number>;
+  assets?: {
+    keypoints?: string;
+    descriptors?: string;
+    scores?: string;
+    landmarks?: string;
+    landmarkIds?: string;
+  };
+}
+
 export interface ScanSavvyPoseResult {
   status: "ready" | "rejected" | "failed";
-  descriptorMode: DescriptorMode;
+  descriptorMode: RelocalizationDescriptorMode;
   confidence: number;
   inlierCount: number;
   matchCount: number;
@@ -56,9 +89,27 @@ export interface ScanSavvyPoseResult {
   notes: string[];
 }
 
+export interface ScanSavvyRuntimeInitOptions {
+  manifestUrl?: string;
+  ortWebGpuUrl?: string;
+  ortWasmUrl?: string;
+  ortWasmPaths?: string;
+  xfeatUrl?: string;
+  lighterGlueUrl?: string;
+  opencvJsUrl?: string;
+  fallbackOpenCvJsUrl?: string;
+  providers?: Array<"webgpu" | "wasm">;
+  maxModelSide?: number;
+  padMultiple?: number;
+  candidateLimit?: number;
+  lighterGlueScoreThreshold?: number;
+  minMatches?: number;
+  minInliers?: number;
+  minConfidence?: number;
+}
+
 export interface LoadScanSavvyOpenCvOptions {
   opencvJsUrl?: string;
 }
 
 export function loadScanSavvyOpenCv(options?: LoadScanSavvyOpenCvOptions): Promise<unknown>;
-

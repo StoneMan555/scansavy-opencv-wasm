@@ -5,12 +5,28 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UPSTREAMS="$ROOT/config/upstreams.json"
 OPENCV_REF="${OPENCV_REF:-4.13.0}"
 BUILD_FLAVOR="${BUILD_FLAVOR:-simd}"
+BUILD_TARGET="${BUILD_TARGET:-full}"
 BUILD_ROOT="${BUILD_ROOT:-$ROOT/.build}"
 CACHE_ROOT="${CACHE_ROOT:-$ROOT/.cache}"
 OPENCV_DIR="${OPENCV_DIR:-$CACHE_ROOT/opencv-$OPENCV_REF}"
-BUILD_DIR="$BUILD_ROOT/opencv-js-$OPENCV_REF-$BUILD_FLAVOR"
 DIST_DIR="$ROOT/dist"
-CONFIG="$ROOT/config/scansavy_opencv_js.config.py"
+case "$BUILD_TARGET" in
+  full)
+    BUILD_LIST="core,imgproc,features2d,calib3d,video,js"
+    CONFIG="$ROOT/config/scansavy_opencv_js.config.py"
+    OUTPUT_PREFIX="scansavy-opencv"
+    ;;
+  geometry)
+    BUILD_LIST="core,calib3d,js"
+    CONFIG="$ROOT/config/scansavy_opencv_geometry_js.config.py"
+    OUTPUT_PREFIX="scansavy-opencv-geometry"
+    ;;
+  *)
+    echo "Unknown BUILD_TARGET=$BUILD_TARGET. Use full or geometry." >&2
+    exit 1
+    ;;
+esac
+BUILD_DIR="$BUILD_ROOT/opencv-js-$OPENCV_REF-$BUILD_FLAVOR-$BUILD_TARGET"
 
 mkdir -p "$CACHE_ROOT" "$BUILD_ROOT" "$DIST_DIR"
 
@@ -37,7 +53,7 @@ args=(
   "--build_wasm"
   "--disable_single_file"
   "--config" "$CONFIG"
-  "--cmake_option=-DBUILD_LIST=core,imgproc,features2d,calib3d,video,js"
+  "--cmake_option=-DBUILD_LIST=$BUILD_LIST"
   "--cmake_option=-DBUILD_opencv_world=OFF"
   "--cmake_option=-DBUILD_EXAMPLES=OFF"
   "--cmake_option=-DBUILD_TESTS=OFF"
@@ -73,12 +89,13 @@ if [ -z "$js_file" ] || [ ! -f "$js_file" ]; then
   exit 1
 fi
 
-cp "$js_file" "$DIST_DIR/scansavy-opencv.js"
+cp "$js_file" "$DIST_DIR/$OUTPUT_PREFIX.js"
 if [ -n "$wasm_file" ] && [ -f "$wasm_file" ]; then
-  cp "$wasm_file" "$DIST_DIR/scansavy-opencv.wasm"
+  cp "$wasm_file" "$DIST_DIR/$OUTPUT_PREFIX.wasm"
 fi
 cp "$ROOT/src/web/scansavy-opencv-loader.js" "$DIST_DIR/scansavy-opencv-loader.js"
 cp "$ROOT/src/web/scansavy-relocalization-worker.js" "$DIST_DIR/scansavy-relocalization-worker.js"
+cp "$ROOT/src/web/scansavy-relocalization-runtime-worker.js" "$DIST_DIR/scansavy-relocalization-runtime-worker.js"
 cp "$ROOT/src/web/scansavy-opencv.d.ts" "$DIST_DIR/scansavy-opencv.d.ts"
 
 node "$ROOT/scripts/make-build-manifest.mjs"

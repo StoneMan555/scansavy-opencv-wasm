@@ -1,5 +1,5 @@
 {
-  "name": "scansavy-opencv-wasm",
+  "name": "scansavy-browser-relocalization-runtime",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,11 +8,18 @@
     "test": "node --test tests/*.test.mjs",
     "validate:config": "node scripts/validate-config.mjs",
     "manifest": "node scripts/make-build-manifest.mjs",
+    "export:xfeat": "powershell -ExecutionPolicy Bypass -File scripts/export-xfeat-lighterglue-onnx.ps1",
+    "assets:xfeat": "node scripts/sync-xfeat-lighterglue-assets.mjs",
+    "assets:onnxruntime": "node scripts/sync-onnxruntime-web-assets.mjs",
+    "stage:web": "node scripts/stage-web-runtime-assets.mjs",
+    "compress": "node scripts/compress-runtime-assets.mjs",
+    "package:runtime": "npm run assets:xfeat && npm run assets:onnxruntime && npm run stage:web && npm run compress && npm run manifest",
     "build:wasm": "bash scripts/build-opencv-js.sh",
-    "build:wasm:windows": "powershell -ExecutionPolicy Bypass -File scripts/build-opencv-js.ps1"
+    "build:wasm:geometry": "bash -lc \"BUILD_TARGET=geometry ./scripts/build-opencv-js.sh\"",
+    "build:wasm:windows": "powershell -ExecutionPolicy Bypass -File scripts/build-opencv-js.ps1",
+    "build:wasm:geometry:windows": "powershell -ExecutionPolicy Bypass -File scripts/build-opencv-js.ps1 -BuildTarget geometry"
   },
   "engines": {
     "node": ">=20"
   }
 }
-

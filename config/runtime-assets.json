@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "scansavy.browser-relocalization-runtime.assets.v0",
+  "packageName": "scansavy-browser-relocalization-runtime",
+  "assetRoot": "dist",
+  "cachePolicy": "public, max-age=31536000, immutable",
+  "canonicalExport": {
+    "repo": "https://github.com/noahzhy/xfeat_lightglue_onnx",
+    "ref": "155f5e1b6c9453162c286eacb0003fa4b8461a9c",
+    "script": "scripts/export-xfeat-lighterglue-onnx.ps1",
+    "opset": 17,
+    "topK": 2048,
+    "dynamicImageDimensions": true,
+    "lighterGlueLayers": 3
+  },
+  "onnxRuntime": {
+    "version": "1.26.0",
+    "preferredProviders": ["webgpu", "wasm"],
+    "assets": [
+      {
+        "name": "ort.webgpu.min.js",
+        "path": "ort/ort.webgpu.min.js",
+        "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/ort.webgpu.min.js",
+        "purpose": "ONNX Runtime WebGPU browser loader."
+      },
+      {
+        "name": "ort-wasm-simd-threaded.jsep.wasm",
+        "path": "ort/ort-wasm-simd-threaded.jsep.wasm",
+        "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/ort-wasm-simd-threaded.jsep.wasm",
+        "purpose": "ONNX Runtime WebGPU/JSEP WebAssembly support asset."
+      },
+      {
+        "name": "ort.wasm.min.js",
+        "path": "ort/ort.wasm.min.js",
+        "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/ort.wasm.min.js",
+        "purpose": "ONNX Runtime WASM browser loader."
+      },
+      {
+        "name": "ort-wasm-simd-threaded.wasm",
+        "path": "ort/ort-wasm-simd-threaded.wasm",
+        "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/ort-wasm-simd-threaded.wasm",
+        "purpose": "ONNX Runtime SIMD threaded WASM fallback asset."
+      }
+    ]
+  },
+  "models": [
+    {
+      "id": "xfeat-2048-dynamic",
+      "name": "xfeat_2048_dynamic.onnx",
+      "path": "models/xfeat_2048_dynamic.onnx",
+      "url": "https://github.com/DavideCatto/XFeat-ONNX/releases/download/V1.0.0/xfeat.onnx",
+      "license": "Apache-2.0",
+      "source": "DavideCatto/XFeat-ONNX V1.0.0 export of verlab/accelerated_features XFeat.",
+      "note": "Fast packaging fallback. Regenerate from canonicalExport when we want the extractor and matcher exported from the exact same noahzhy path."
+    },
+    {
+      "id": "lighterglue-l3",
+      "name": "lighterglue_L3.onnx",
+      "path": "models/lighterglue_L3.onnx",
+      "url": "https://raw.githubusercontent.com/noahzhy/xfeat_lightglue_onnx/155f5e1b6c9453162c286eacb0003fa4b8461a9c/onnx/lighterglue_L3.onnx",
+      "license": "Apache-2.0",
+      "source": "noahzhy/xfeat_lightglue_onnx 155f5e1b6c9453162c286eacb0003fa4b8461a9c/onnx/lighterglue_L3.onnx",
+      "note": "Default high-quality browser matcher. Deeper LighterGlue variants are deferred until phone benchmarks justify the payload."
+    }
+  ]
+}
