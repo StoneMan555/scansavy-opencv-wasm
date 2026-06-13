@@ -13,6 +13,7 @@
     "assets:onnxruntime": "node scripts/sync-onnxruntime-web-assets.mjs",
     "stage:web": "node scripts/stage-web-runtime-assets.mjs",
     "compress": "node scripts/compress-runtime-assets.mjs",
+    "package:size-report": "node scripts/report-runtime-package-sizes.mjs",
     "package:runtime": "npm run assets:xfeat && npm run assets:onnxruntime && npm run stage:web && npm run compress && npm run manifest",
     "build:wasm": "bash scripts/build-opencv-js.sh",
     "build:wasm:geometry": "bash -lc \"BUILD_TARGET=geometry ./scripts/build-opencv-js.sh\"",

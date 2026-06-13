@@ -8,6 +8,10 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const distDir = join(root, "dist");
 const compressExts = new Set([".onnx", ".wasm"]);
 const minJsBytes = 32 * 1024;
+const onlyIndex = process.argv.indexOf("--only");
+const onlyFiles = onlyIndex >= 0
+  ? new Set(process.argv.slice(onlyIndex + 1).map((file) => file.split("\\").join("/")))
+  : null;
 
 if (!statExists(distDir)) {
   console.log(JSON.stringify({ status: "skipped", reason: "dist directory does not exist" }, null, 2));
@@ -17,6 +21,8 @@ if (!statExists(distDir)) {
 const compressed = [];
 for (const file of walk(distDir)) {
   if (file.endsWith(".br") || file.endsWith(".gz")) continue;
+  const relativeFile = relative(distDir, file).split("\\").join("/");
+  if (onlyFiles && !onlyFiles.has(relativeFile)) continue;
   const ext = extname(file);
   const size = statSync(file).size;
   if (!compressExts.has(ext) && !(ext === ".js" && size >= minJsBytes)) continue;
@@ -31,7 +37,7 @@ for (const file of walk(distDir)) {
   writeFileSync(`${file}.gz`, gzip);
   writeFileSync(`${file}.br`, brotli);
   compressed.push({
-    file: relative(distDir, file).split("\\").join("/"),
+    file: relativeFile,
     rawBytes: data.length,
     gzipBytes: gzip.length,
     brotliBytes: brotli.length,

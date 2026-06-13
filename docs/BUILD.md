@@ -31,6 +31,15 @@ SIMD is the default because it improves mobile Chrome performance without requir
 
 Use `simd` for current ScanSavvy phone testing. Use `simd-threads` only after the app serves cross-origin isolation headers.
 
+This OpenCV build flavor is independent of ONNX Runtime WebGPU. XFeat and LighterGlue use ONNX Runtime's selected execution provider; OpenCV only handles geometry in WebAssembly. A good production phone route can therefore run:
+
+```text
+ONNX Runtime WebGPU: XFeat + LighterGlue
+OpenCV.js WASM SIMD: solvePnPRansac + projection
+```
+
+If WebGPU is unavailable, ONNX Runtime falls back to WASM. In that fallback path, cross-origin isolation becomes more important because it allows `SharedArrayBuffer` and threaded ORT WASM.
+
 ## Why Not Stock opencv-mobile WebAssembly?
 
 The stock `opencv-mobile-4.13.0-webassembly.zip` contains static WebAssembly libraries for C/C++ consumers. It does not ship a browser `opencv.js` bundle, and the package omits `opencv_calib3d`. ScanSavvy needs `calib3d` for `solvePnPRansac`, `solvePnPRefineLM`, and `projectPoints`.

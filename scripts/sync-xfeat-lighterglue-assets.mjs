@@ -16,6 +16,11 @@ async function syncAsset(asset) {
   const target = join(distDir, asset.path);
   mkdirSync(dirname(target), { recursive: true });
   if (!existsSync(target) || process.argv.includes("--force")) {
+    if (!asset.url || String(asset.url).startsWith("generated:")) {
+      throw new Error(
+        `${asset.path} must be generated before packaging. Run npm run export:xfeat, then rerun npm run package:runtime.`,
+      );
+    }
     await download(asset.url, target);
   }
   const info = statSync(target);

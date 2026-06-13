@@ -41,6 +41,25 @@ for (const [fromRelative, toRelative, required] of copies) {
   staged.push({ path: toRelative, bytes: statSync(to).size });
 }
 
+const ortSidecars = [
+  "ort-wasm-simd-threaded.asyncify.mjs",
+  "ort-wasm-simd-threaded.asyncify.wasm",
+  "ort-wasm-simd-threaded.jsep.mjs",
+  "ort-wasm-simd-threaded.jsep.wasm",
+  "ort-wasm-simd-threaded.jspi.mjs",
+  "ort-wasm-simd-threaded.jspi.wasm",
+  "ort-wasm-simd-threaded.mjs",
+  "ort-wasm-simd-threaded.wasm",
+];
+
+for (const name of ortSidecars) {
+  const from = join(dist, "ort", name);
+  const to = join(dist, name);
+  if (!existsSync(from)) continue;
+  copyFileSync(from, to);
+  staged.push({ path: name, bytes: statSync(to).size, source: "ort-root-compat" });
+}
+
 console.log(JSON.stringify({
   status: "ready",
   artifactDownload: existsSync(artifactDownload),

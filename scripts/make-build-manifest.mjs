@@ -41,6 +41,7 @@ const manifest = {
   },
   canonicalExport: runtimeAssets.canonicalExport,
   providers: runtimeAssets.onnxRuntime.preferredProviders,
+  runtimeProfiles: runtimeAssets.onnxRuntime.runtimeProfiles,
   models: runtimeAssets.models.map((model) => ({
     id: model.id,
     path: model.path,

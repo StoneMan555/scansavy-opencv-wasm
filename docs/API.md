@@ -18,7 +18,10 @@ worker.postMessage({
     providers: ["webgpu", "wasm"],
     xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
     lighterGlueUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3.onnx",
-    opencvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv-geometry.js"
+    opencvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv-geometry.js",
+    runtimeProfile: "phone-webgpu",
+    webgpuPowerPreference: "high-performance",
+    webgpuPreferredLayout: "NCHW"
   }
 });
 ```
@@ -29,11 +32,30 @@ Returns:
 {
   "status": "ready",
   "provider": "webgpu",
+  "runtimeDiagnostics": {
+    "runtimeProfile": "phone-webgpu",
+    "crossOriginIsolated": true,
+    "hasSharedArrayBuffer": true,
+    "hasWebGpu": true,
+    "webgpuPowerPreference": "high-performance",
+    "webgpuPreferredLayout": "NCHW",
+    "webgpuGraphCapture": false,
+    "wasm": { "numThreads": 4 }
+  },
   "hasOpenCvGeometry": true,
   "hasXFeat": true,
   "hasLighterGlue": true
 }
 ```
+
+Supported profiles:
+
+- `phone-webgpu`: default physical Android Chrome profile. Attempts ONNX Runtime `webgpu`, then `wasm`, and keeps keyframe matching inside the depth-backed sidecar budget.
+- `phone-wasm`: physical phone fallback. Forces ONNX Runtime `wasm`, with threaded WASM when cross-origin isolation allows it.
+- `emulator-safe`: S23+-shaped emulator QA profile. It tries WebGPU first, then falls back to the 6-thread ORT WASM lane with bounded startup budgets and provider-attempt diagnostics.
+- `wasm-fast`: experimental WASM speed profile. Uses fewer query/keyframe features and one candidate first.
+
+`webgpuGraphCapture` is intentionally off in the default profile. Turn it on only for a fixed-shape phone profile after confirming the model input size and output readback path stay stable on the target device.
 
 ## `loadMapPack`
 
