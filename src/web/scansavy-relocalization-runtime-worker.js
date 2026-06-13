@@ -262,6 +262,41 @@ const RUNTIME_PROFILES = {
     webgpuPreferredLayout: "NCHW",
     webgpuGraphCapture: true,
   },
+  "emulator-webnn-gpu": {
+    providers: ["webnn", "webgpu", "wasm"],
+    wasmNumThreads: 6,
+    wasmAutoThreadMax: 6,
+    wasmAutoThreadDivisor: 2,
+    wasmProxy: false,
+    deviceBaseline: "samsung-s23-plus-emulator-webnn-probe",
+    deviceCpuCoreTarget: 8,
+    webnnDeviceType: "gpu",
+    webnnPowerPreference: "high-performance",
+    webnnPreflightTimeoutMs: 10000,
+    webnnSessionCreateTimeoutMs: 60000,
+    webgpuBurstFrameConcurrency: 3,
+    webgpuCandidateHydrationConcurrency: 6,
+    candidateHydrationConcurrency: 6,
+    wasmCandidateHydrationConcurrency: 6,
+    maxHydratedKeyframes: 64,
+    prefetchNeighborKeyframes: 3,
+    webgpuPreflightTimeoutMs: 8000,
+    webgpuSessionCreateTimeoutMs: 45000,
+    xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_384_fixed.onnx",
+    fallbackXFeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
+    maxModelSide: 640,
+    fixedInputWidth: 640,
+    fixedInputHeight: 640,
+    maxQueryFeatures: 384,
+    maxKeyframeFeatures: 384,
+    candidateLimit: 1,
+    fallbackCandidateLimit: 2,
+    maxCandidateLimit: 4,
+    maxLighterGluePairsPerBurst: 1,
+    adaptiveCandidateEscalation: true,
+    webgpuPreferredLayout: "NCHW",
+    webgpuGraphCapture: true,
+  },
   "emulator-conservative": {
     providers: ["wasm"],
     wasmNumThreads: 1,
@@ -412,18 +447,38 @@ async function initRuntime(payload) {
   const started = performance.now();
   const requestedOptions = payload.options || payload;
   const profileName = requestedOptions.runtimeProfile || requestedOptions.profile || DEFAULTS.runtimeProfile || "phone-webgpu";
-  const profileOptions = RUNTIME_PROFILES[profileName] || RUNTIME_PROFILES["phone-webgpu"];
-  state.options = { ...DEFAULTS, ...profileOptions, ...requestedOptions, runtimeProfile: profileName };
+  state.manifest = await maybeFetchJson(requestedOptions.manifestUrl || DEFAULTS.manifestUrl);
+  const manifestProfiles = state.manifest?.runtimeProfiles || state.manifest?.onnxRuntime?.runtimeProfiles || {};
+  const profileOptions =
+    manifestProfiles[profileName] ||
+    RUNTIME_PROFILES[profileName] ||
+    manifestProfiles["phone-webgpu"] ||
+    RUNTIME_PROFILES["phone-webgpu"];
+  const profileOverrideKeys = Array.isArray(requestedOptions.profileOverrideKeys)
+    ? requestedOptions.profileOverrideKeys.map(String)
+    : [];
+  const effectiveRequestedOptions = { ...requestedOptions };
+  if (
+    Array.isArray(profileOptions?.providers) &&
+    !profileOverrideKeys.includes("providers") &&
+    Object.prototype.hasOwnProperty.call(effectiveRequestedOptions, "providers")
+  ) {
+    delete effectiveRequestedOptions.providers;
+  }
+  state.options = { ...DEFAULTS, ...profileOptions, ...effectiveRequestedOptions, runtimeProfile: profileName };
   state.warmedUp = false;
   state.warmupSummary = null;
-  applyProfileDefaults(profileOptions, requestedOptions.profileOverrideKeys);
-  state.manifest = await maybeFetchJson(state.options.manifestUrl);
+  applyProfileDefaults(profileOptions, profileOverrideKeys);
   state.ort = await loadOrt(state.options);
   state.opencv = await loadOpenCv(state.options.opencvJsUrl, state.options.fallbackOpenCvJsUrl);
 
-  const providers = Array.isArray(state.options.providers) && state.options.providers.length
-    ? state.options.providers
-    : DEFAULTS.providers;
+  const providers =
+    Array.isArray(profileOptions?.providers) && profileOptions.providers.length && !profileOverrideKeys.includes("providers")
+      ? profileOptions.providers
+      : Array.isArray(state.options.providers) && state.options.providers.length
+        ? state.options.providers
+        : DEFAULTS.providers;
+  state.options.providers = providers;
   const sessionResult = await createSessions(providers);
 
   return {

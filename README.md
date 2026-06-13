@@ -48,12 +48,13 @@ Static export hosts must add those headers outside Next.js. The ScanSavvy dev st
 | `phone-webgpu-quality` | Physical phone quality lane | `webgpu`, then `wasm` | `6` when it falls back to WASM |
 | `phone-wasm-safe` | Physical phone fallback when WebGPU/WebNN are disabled or unstable | `wasm` | `6` when cross-origin isolated |
 | `emulator-safe` | Android emulator route QA that mirrors the S23+ phone baseline on the RTX workstation | `webgpu`, then `wasm` | `6` when cross-origin isolated and exposed by the AVD |
+| `emulator-webnn-gpu` | Android emulator WebNN acceleration probe under Chrome WebNN flags | `webnn`, then `webgpu`, then `wasm` | `6` when it falls back to WASM |
 | `emulator-conservative` | Legacy emulator fallback for debugging browser/GPU instability only | `wasm` | `1` |
 | `wasm-fast` | Experimental speed profile for WASM-only browser runs | `wasm` | up to `6` when cross-origin isolated |
 
 `emulator-safe` intentionally mirrors the S23+ phone baseline so emulator runs return phone-shaped runtime evidence. It still has bounded WebGPU startup budgets (8s preflight, 45s session creation) so a broken emulator GPU path falls back to the same multi-thread WASM baseline with provider-attempt diagnostics instead of hanging. If the emulator/browser GPU path itself is being debugged, switch explicitly to `emulator-conservative`; do not use that conservative profile for performance comparisons.
 
-`phone-webnn-npu` is intentionally a physical-device probe. Android emulators may expose `navigator.gpu` without a usable adapter and generally do not expose `navigator.ml.createContext`; in that case the worker records the failed provider attempts and falls back to the same WASM lane.
+`phone-webnn-npu` is intentionally a physical-device probe. Android emulators may expose `navigator.gpu` without a usable adapter and generally do not expose `navigator.ml.createContext`; in that case the worker records the failed provider attempts and falls back to the same WASM lane. `emulator-webnn-gpu` exists only to test whether an emulator Chrome build exposes WebNN when started with WebNN feature flags. Treat a fallback result as useful evidence, not a failure of the relocalizer.
 
 The runtime also uses a center-first burst schedule by default. For a 5-frame relocalization burst it tries the middle frame first, then expands outward only when more evidence is needed. This keeps the native-cadence burst available for recovery without paying the XFeat/LighterGlue cost for every frame when the first representative frame already solves.
 
