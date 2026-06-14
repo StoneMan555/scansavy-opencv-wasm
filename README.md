@@ -58,6 +58,8 @@ Static export hosts must add those headers outside Next.js. The ScanSavvy dev st
 
 The WebGPU preflight now sweeps adapter request variants and reports the exact failure point. Phone profiles try the normal high-performance core adapter first. Emulator profiles also try compatibility-level and fallback adapter requests so ScanSavvy can distinguish "Chrome exposes `navigator.gpu`" from "Chrome can actually return a usable adapter for ONNX Runtime WebGPU." The WebNN probe can optionally request a WebNN context through a WebGPU device for diagnosing future WebNN/WebGPU interop.
 
+When WebGPU preflight succeeds, the worker now creates a `GPUDevice` from that adapter and passes it into ONNX Runtime Web's WebGPU execution provider. This avoids the "probe succeeded but ORT selected differently" class of bugs and makes the diagnostics stronger: `webgpuCustomDeviceReady=true` means the relocalizer is actually handing ONNX Runtime a concrete device for XFeat/LighterGlue inference. If that device path fails, the provider attempt records the device/preflight failure before trying the next configured provider.
+
 The runtime also uses a center-first burst schedule by default. For a 5-frame relocalization burst it tries the middle frame first, then expands outward only when more evidence is needed. This keeps the native-cadence burst available for recovery without paying the XFeat/LighterGlue cost for every frame when the first representative frame already solves.
 
 Performance policy follows the current browser-localization architecture:

@@ -103,6 +103,10 @@ export interface ScanSavvyRuntimeInitOptions {
   webgpuAdapterPowerPreferences?: Array<"high-performance" | "low-power" | "default">;
   webgpuAdapterFeatureLevels?: Array<"core" | "compatibility">;
   webgpuTryFallbackAdapter?: boolean;
+  webgpuPreferredLayout?: "NCHW" | "NHWC";
+  webgpuGraphCapture?: boolean;
+  webgpuUsePreflightDevice?: boolean;
+  webgpuProfiling?: boolean;
   webnnDeviceType?: "cpu" | "gpu" | "npu";
   webnnPowerPreference?: "high-performance" | "low-power" | "default";
   webnnUseWebGpuDevice?: boolean;

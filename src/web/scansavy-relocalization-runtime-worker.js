@@ -72,6 +72,7 @@ const DEFAULTS = {
   webnnUseWebGpuDevice: false,
   webgpuPreferredLayout: "NCHW",
   webgpuGraphCapture: false,
+  webgpuUsePreflightDevice: true,
   webgpuForceFallbackAdapter: false,
   webgpuProfiling: false,
   lazyMapPack: true,
@@ -368,11 +369,16 @@ const state = {
   providerAttempts: [],
   wasmConfig: null,
   webgpuPreflightDiagnostics: null,
+  webgpuDevice: null,
+  webgpuDeviceLabel: "",
+  webgpuDeviceLostReason: null,
   webnnPreflightDiagnostics: null,
   warmedUp: false,
   warmupSummary: null,
   assetBufferCache: new Map(),
   assetBufferCacheBytes: 0,
+  preprocessCanvas: null,
+  preprocessSourceCanvas: null,
 };
 
 self.onmessage = async (event) => {
@@ -491,6 +497,10 @@ function runtimeDiagnostics() {
     webnnPreflightDiagnostics: state.webnnPreflightDiagnostics,
     webgpuPreferredLayout: state.options.webgpuPreferredLayout || DEFAULTS.webgpuPreferredLayout,
     webgpuGraphCapture: Boolean(state.options.webgpuGraphCapture),
+    webgpuUsePreflightDevice: Boolean(state.options.webgpuUsePreflightDevice),
+    webgpuCustomDeviceReady: Boolean(state.webgpuDevice),
+    webgpuDeviceLabel: state.webgpuDeviceLabel || "",
+    webgpuDeviceLostReason: state.webgpuDeviceLostReason,
     webgpuPreflight: state.options.webgpuPreflight !== false,
     webnnPreflight: state.options.webnnPreflight !== false,
     webgpuPreflightTimeoutMs: Number(state.options.webgpuPreflightTimeoutMs || DEFAULTS.webgpuPreflightTimeoutMs),
@@ -596,6 +606,7 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
     "webnnUseWebGpuDevice",
     "webgpuPreferredLayout",
     "webgpuGraphCapture",
+    "webgpuUsePreflightDevice",
     "webnnPreflightTimeoutMs",
     "webnnSessionCreateTimeoutMs",
     "webgpuPreflightTimeoutMs",
@@ -642,6 +653,9 @@ async function loadOrt(options) {
 
 async function createSessions(providers) {
   const attempts = [];
+  state.webgpuDevice = null;
+  state.webgpuDeviceLabel = "";
+  state.webgpuDeviceLostReason = null;
   for (const provider of providers) {
     try {
       if (provider === "webgpu") {
@@ -665,8 +679,15 @@ async function createSessions(providers) {
           Number(state.options.webgpuPreflightTimeoutMs || DEFAULTS.webgpuPreflightTimeoutMs),
           "WebGPU preflight",
         );
-        if (webgpuPreflight?.selectedRequestOptions?.forceFallbackAdapter) {
+        if (webgpuPreflight?.diagnostics?.selectedRequestOptions?.forceFallbackAdapter) {
           state.options.webgpuForceFallbackAdapter = true;
+        }
+        if (state.options.webgpuUsePreflightDevice !== false) {
+          await withTimeout(
+            createWebGpuPreflightDevice(webgpuPreflight),
+            Number(state.options.webgpuPreflightTimeoutMs || DEFAULTS.webgpuPreflightTimeoutMs),
+            "WebGPU preflight device creation",
+          );
         }
         configureOrtWebGpu(state.ort, state.options);
       }
@@ -696,6 +717,7 @@ async function createSessions(providers) {
       state.providerAttempts = attempts;
       return { providerAttempts: attempts };
     } catch (error) {
+      if (provider === "webgpu") disposeWebGpuDevice();
       const errorText = String(error?.message || error);
       attempts.push({
         provider,
@@ -776,7 +798,66 @@ async function preflightWebGpu(options) {
       `WebGPU adapter sweep ${RUNTIME_ADAPTER_DIAGNOSTICS_VERSION} failed: no GPU adapter returned. ${summarizeAdapterAttempts(result.diagnostics)}`,
     );
   }
-  return result.diagnostics;
+  return result;
+}
+
+async function createWebGpuPreflightDevice(preflightResult) {
+  if (!preflightResult || state.webgpuDevice) return state.webgpuDevice;
+  const adapterResult = preflightResult.adapter ? preflightResult : await requestWebGpuAdapter(state.options);
+  if (!adapterResult.adapter?.requestDevice) {
+    state.webgpuPreflightDiagnostics = {
+      ...(state.webgpuPreflightDiagnostics || preflightResult.diagnostics || {}),
+      customDevice: {
+        status: "failed",
+        reason: "adapter-unavailable-for-device",
+        attempts: adapterResult.diagnostics?.attempts || [],
+      },
+    };
+    throw new Error(`WebGPU preflight device unavailable. ${summarizeAdapterAttempts(adapterResult.diagnostics)}`);
+  }
+  const started = performance.now();
+  const device = await adapterResult.adapter.requestDevice();
+  state.webgpuDevice = device;
+  state.webgpuDeviceLabel = `scansavy-${state.options.runtimeProfile || "webgpu"}-${Date.now()}`;
+  try {
+    device.label = state.webgpuDeviceLabel;
+  } catch {
+    // GPUDevice.label is optional; diagnostics still carry our desired label.
+  }
+  if (device.lost?.then) {
+    device.lost.then((info) => {
+      state.webgpuDeviceLostReason = {
+        reason: info?.reason || "unknown",
+        message: info?.message || "",
+      };
+    }).catch((error) => {
+      state.webgpuDeviceLostReason = {
+        reason: "lost-promise-rejected",
+        message: String(error?.message || error),
+      };
+    });
+  }
+  state.webgpuPreflightDiagnostics = {
+    ...(state.webgpuPreflightDiagnostics || preflightResult.diagnostics || {}),
+    customDevice: {
+      status: "ready",
+      elapsedMs: roundMs(performance.now() - started),
+      label: state.webgpuDeviceLabel,
+      selectedAdapterInfo: adapterResult.diagnostics?.selectedAdapterInfo || null,
+    },
+  };
+  return device;
+}
+
+function disposeWebGpuDevice() {
+  if (!state.webgpuDevice) return;
+  try {
+    if (typeof state.webgpuDevice.destroy === "function") state.webgpuDevice.destroy();
+  } catch {
+    // Best-effort cleanup only; failed providers immediately continue to fallback.
+  }
+  state.webgpuDevice = null;
+  state.webgpuDeviceLabel = "";
 }
 
 async function preflightWebNn(options) {
@@ -1055,10 +1136,12 @@ function sessionOptionsFor(provider, options) {
 
 function executionProviderFor(provider, options) {
   if (provider === "webgpu") {
-    return {
+    const ep = {
       name: "webgpu",
       preferredLayout: options.webgpuPreferredLayout || DEFAULTS.webgpuPreferredLayout,
     };
+    if (state.webgpuDevice) ep.device = state.webgpuDevice;
+    return ep;
   }
   if (provider === "webnn") {
     return {
@@ -1939,9 +2022,9 @@ function preprocessImage(imageData, options) {
     return preprocessImageDirect(imageData, width, height, scale);
   }
 
-  const canvas = new OffscreenCanvas(width, height);
+  const canvas = reusableOffscreenCanvas("preprocessCanvas", width, height);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  const sourceCanvas = new OffscreenCanvas(imageData.width, imageData.height);
+  const sourceCanvas = reusableOffscreenCanvas("preprocessSourceCanvas", imageData.width, imageData.height);
   sourceCanvas.getContext("2d").putImageData(imageData, 0, 0);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "medium";
@@ -1965,6 +2048,20 @@ function preprocessImage(imageData, options) {
     sourceHeight: imageData.height,
     fixedInput,
   };
+}
+
+function reusableOffscreenCanvas(slot, width, height) {
+  const safeWidth = Math.max(1, Number(width) || 1);
+  const safeHeight = Math.max(1, Number(height) || 1);
+  let canvas = state[slot];
+  if (!canvas) {
+    canvas = new OffscreenCanvas(safeWidth, safeHeight);
+    state[slot] = canvas;
+    return canvas;
+  }
+  if (canvas.width !== safeWidth) canvas.width = safeWidth;
+  if (canvas.height !== safeHeight) canvas.height = safeHeight;
+  return canvas;
 }
 
 function preprocessImageDirect(imageData, width, height, scale) {

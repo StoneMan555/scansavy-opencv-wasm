@@ -53,6 +53,8 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["emulator-safe"].webgpuAdapterFeatureLevels, ["core", "compatibility"]);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].fixedInputWidth, 640);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].fixedInputHeight, 640);
+  assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].webgpuUsePreflightDevice, true);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-webgpu-fast"].webgpuUsePreflightDevice, true);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].webnnUseWebGpuDevice, true);
 });
 
@@ -68,6 +70,7 @@ test("High-quality runtime worker exposes XFeat/LighterGlue and projection messa
     "solvePnPRansac",
     "lighterGlueScoreThreshold",
     "requestWebGpuAdapter",
+    "createWebGpuPreflightDevice",
     "inferXFeatInputShape",
     "webgpu-adapter-sweep-v2",
   ]) {
