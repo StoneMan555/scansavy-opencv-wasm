@@ -2220,7 +2220,7 @@ function solvePnpForMatches(matched, keyframe, query, frameIndex, options) {
   const solved = solvePnpArrays({
     objectArray: pnpInput.objectArray,
     imageArray: pnpInput.imageArray,
-    cameraModel: keyframe.cameraModel || state.sidecar.cameraModel,
+    cameraModel: cameraModelForQuery(keyframe.cameraModel || state.sidecar.cameraModel, query),
     matchCount: pnpInput.matchCount,
     rawMatchCount: matches.length,
     geometryMatchCount: pnpInput.matchCount,
@@ -2788,6 +2788,37 @@ function cameraMatrixFor(camera = {}) {
   ]);
 }
 
+function cameraModelForQuery(baseCamera = {}, query = {}) {
+  const explicit = query.cameraModel || query.intrinsics;
+  if (explicit?.fx && explicit?.fy) {
+    return {
+      ...baseCamera,
+      ...explicit,
+      width: Number(explicit.width || query.width || baseCamera.width || 0),
+      height: Number(explicit.height || query.height || baseCamera.height || 0),
+    };
+  }
+
+  const baseWidth = Number(baseCamera?.width || state.sidecar?.cameraModel?.width || query.width || 1);
+  const baseHeight = Number(baseCamera?.height || state.sidecar?.cameraModel?.height || query.height || 1);
+  const queryWidth = Number(query?.width || baseWidth);
+  const queryHeight = Number(query?.height || baseHeight);
+  const sx = queryWidth / Math.max(1, baseWidth);
+  const sy = queryHeight / Math.max(1, baseHeight);
+  return {
+    ...baseCamera,
+    fx: Number(baseCamera?.fx || 1) * sx,
+    fy: Number(baseCamera?.fy || baseCamera?.fx || 1) * sy,
+    cx: Number(baseCamera?.cx || 0) * sx,
+    cy: Number(baseCamera?.cy || 0) * sy,
+    width: queryWidth,
+    height: queryHeight,
+    sourceWidth: baseWidth,
+    sourceHeight: baseHeight,
+    scaleFromSourceCamera: [sx, sy],
+  };
+}
+
 function distortionFor(camera = {}) {
   const dist = camera?.distortion || camera?.distCoeffs || [0, 0, 0, 0];
   return state.opencv.matFromArray(dist.length || 4, 1, state.opencv.CV_64F, dist.length ? dist.map(Number) : [0, 0, 0, 0]);
@@ -2825,7 +2856,10 @@ function outputTensor(output, names, fallbackIndex, required = true) {
 function normalizeImageData(frame) {
   if (frame instanceof ImageData) return frame;
   if (frame?.data && frame?.width && frame?.height) {
-    return new ImageData(new Uint8ClampedArray(frame.data), Number(frame.width), Number(frame.height));
+    const imageData = new ImageData(new Uint8ClampedArray(frame.data), Number(frame.width), Number(frame.height));
+    if (frame.cameraModel) imageData.cameraModel = frame.cameraModel;
+    if (frame.intrinsics) imageData.intrinsics = frame.intrinsics;
+    return imageData;
   }
   throw new Error("Frame must be ImageData or a serializable { data, width, height } object.");
 }
