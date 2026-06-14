@@ -42,15 +42,16 @@ Static export hosts must add those headers outside Next.js. The ScanSavvy dev st
 
 | Profile | Use | Providers | WASM threads |
 | --- | --- | --- | --- |
-| `phone-webgpu` | Default physical Android Chrome test, tuned to the Samsung S23+ baseline | `webgpu`, then `wasm` | `6` when cross-origin isolated |
-| `phone-webnn-npu` | Physical Android Chrome NPU probe for S23+-class phones | `webnn`, then `webgpu`, then `wasm` | `6` when it falls back to WASM |
-| `phone-webgpu-fast` | Physical phone speed lane | `webgpu`, then `wasm` | `6` when it falls back to WASM |
-| `phone-webgpu-quality` | Physical phone quality lane | `webgpu`, then `wasm` | `6` when it falls back to WASM |
-| `phone-wasm-safe` | Physical phone fallback when WebGPU/WebNN are disabled or unstable | `wasm` | `6` when cross-origin isolated |
-| `emulator-safe` | Android emulator route QA that mirrors the S23+ phone baseline on the RTX workstation | `webgpu`, then `wasm` | `6` when cross-origin isolated and exposed by the AVD |
-| `emulator-webnn-gpu` | Android emulator WebNN acceleration probe under Chrome WebNN flags | `webnn`, then `webgpu`, then `wasm` | `6` when it falls back to WASM |
+| `phone-webgpu` | Default physical Android Chrome test, tuned to the Samsung S23+ baseline | `webgpu`, then `wasm` | up to `8` when cross-origin isolated |
+| `phone-webnn-npu` | Physical Android Chrome NPU probe for S23+-class phones | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
+| `phone-s23-plus-max` | Aggressive physical S23+ stress profile for fastest browser-side path discovery | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
+| `phone-webgpu-fast` | Physical phone speed lane | `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
+| `phone-webgpu-quality` | Physical phone quality lane | `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
+| `phone-wasm-safe` | Physical phone fallback when WebGPU/WebNN are disabled or unstable | `wasm` | up to `8` when cross-origin isolated |
+| `emulator-safe` | Android emulator route QA that mirrors the S23+ phone baseline on the RTX workstation | `webgpu`, then `wasm` | up to `8`, capped by the AVD browser |
+| `emulator-webnn-gpu` | Android emulator WebNN acceleration probe under Chrome WebNN flags | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
 | `emulator-conservative` | Legacy emulator fallback for debugging browser/GPU instability only | `wasm` | `1` |
-| `wasm-fast` | Experimental speed profile for WASM-only browser runs | `wasm` | up to `6` when cross-origin isolated |
+| `wasm-fast` | Experimental speed profile for WASM-only browser runs | `wasm` | up to `8` when cross-origin isolated |
 
 `emulator-safe` intentionally mirrors the S23+ phone baseline so emulator runs return phone-shaped runtime evidence. It still has bounded WebGPU startup budgets (8s preflight, 45s session creation) so a broken emulator GPU path falls back to the same multi-thread WASM baseline with provider-attempt diagnostics instead of hanging. If the emulator/browser GPU path itself is being debugged, switch explicitly to `emulator-conservative`; do not use that conservative profile for performance comparisons.
 
@@ -62,6 +63,8 @@ When WebGPU preflight succeeds, the worker now creates a `GPUDevice` from that a
 
 The runtime also uses a center-first burst schedule by default. For a 5-frame relocalization burst it tries the middle frame first, then expands outward only when more evidence is needed. This keeps the native-cadence burst available for recovery without paying the XFeat/LighterGlue cost for every frame when the first representative frame already solves.
 
+The worker deliberately keeps burst feature extraction serialized for the default fast lanes, even on S23+-class profiles. ONNX Runtime Web `InferenceSession.run()` is not safe to call concurrently on the same session; overlapping XFeat calls in one worker fail with a "Session already started" runtime error. `phone-webgpu-quality` remains the explicit experimental lane for multi-frame burst planning, but promotion requires a measured multi-session pool that does not blow up memory on mobile.
+
 Performance policy follows the current browser-localization architecture:
 
 - XFeat is the fast, hardware-agnostic feature extractor.
@@ -70,6 +73,18 @@ Performance policy follows the current browser-localization architecture:
 - MapPack sidecars should depth-back as many learned keypoints as possible offline. The default ScanSavvy profile compares against 384 keyframe features because the LongStream depth-projected sidecar stores 384 geometry-backed rows per keyframe; extra visual-only rows cost matcher time without helping PnP.
 - Physical-phone WebGPU uses `powerPreference: "high-performance"` and ONNX Runtime WebGPU's NCHW-preferred layout. The fixed-shape phone profiles enable graph-capture-compatible model slots, while dynamic debug exports remain available for QA. Validate WebGPU/WebNN timing on the target phone before promoting it over the WASM-safe lane.
 - The default emulator profile is no longer deliberately weak: `emulator-safe` uses the S23+ phone-shaped lane. Only `emulator-conservative` keeps the old single-thread WASM route/backend fallback.
+
+### Browser vs Native NPU
+
+This package is a browser runtime, so it cannot call Qualcomm QNN or LiteRT delegates directly from Android Chrome. The browser acceleration stack is:
+
+1. ONNX Runtime WebNN, when Chrome exposes `navigator.ml`.
+2. ONNX Runtime WebGPU, when Chrome returns a real `GPUAdapter`/`GPUDevice`.
+3. ONNX Runtime WASM SIMD/threads, when cross-origin isolation enables `SharedArrayBuffer`.
+
+Google's LiteRT Qualcomm NPU guide is still useful as the native Android performance ceiling for future Capacitor or app-clip style bridges. Its published Snapdragon 8 Gen 2 / Samsung S23 numbers show why the native lane matters: selected benchmark models are materially faster on NPU than GPU/CPU, especially segmentation-class workloads. For the current Chrome-only route, treat LiteRT/QNN as the comparison target and WebNN as the browser-standard path that may eventually reach similar hardware. See [LiteRT Qualcomm NPU](https://developers.google.com/edge/litert/android/npu/qualcomm), [ONNX Runtime WebGPU](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html), and [ONNX Runtime Web env flags](https://onnxruntime.ai/docs/tutorials/web/env-flags-and-session-options.html).
+
+Native Qualcomm acceleration is therefore a future app-bridge lane, not something the Chrome route can load directly. The browser can test `webnn`, `webgpu`, and threaded `wasm`; a Capacitor/native implementation would use LiteRT with the Qualcomm NPU delegate or QNN SDK to compare against the browser numbers.
 
 ## Outputs
 

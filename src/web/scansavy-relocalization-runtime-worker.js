@@ -34,6 +34,10 @@ const DEFAULTS = {
   stopBurstAfterAcceptedCandidate: true,
   fuseBurstCandidates: true,
   burstFrameOrder: "center-first",
+  parallelBurstExtraction: false,
+  burstFrameExtractionConcurrency: 2,
+  parallelBurstFrameLimit: 5,
+  parallelBurstCandidatesPerFrame: 1,
   minFusedGeometryMatches: 8,
   maxFusedMatches: 128,
   maxLighterGluePairsPerBurst: 4,
@@ -44,18 +48,18 @@ const DEFAULTS = {
   warmupCandidateLimit: 1,
   warmupMaxLighterGluePairs: 1,
   wasmNumThreads: "auto",
-  wasmAutoThreadMax: 6,
+  wasmAutoThreadMax: 8,
   wasmAutoThreadDivisor: 2,
   wasmProxy: false,
   deviceBaseline: "samsung-s23-plus",
   deviceCpuCoreTarget: 8,
-  webgpuBurstFrameConcurrency: 3,
-  webgpuCandidateHydrationConcurrency: 6,
-  candidateHydrationConcurrency: 6,
-  wasmCandidateHydrationConcurrency: 6,
-  maxAssetBufferCacheEntries: 192,
-  maxAssetBufferCacheBytes: 128 * 1024 * 1024,
-  prefetchNeighborKeyframes: 3,
+  webgpuBurstFrameConcurrency: 4,
+  webgpuCandidateHydrationConcurrency: 8,
+  candidateHydrationConcurrency: 8,
+  wasmCandidateHydrationConcurrency: 8,
+  maxAssetBufferCacheEntries: 256,
+  maxAssetBufferCacheBytes: 192 * 1024 * 1024,
+  prefetchNeighborKeyframes: 5,
   webgpuPreflight: true,
   webnnPreflight: true,
   webgpuPreflightTimeoutMs: 8000,
@@ -76,24 +80,28 @@ const DEFAULTS = {
   webgpuForceFallbackAdapter: false,
   webgpuProfiling: false,
   lazyMapPack: true,
-  maxHydratedKeyframes: 24,
+  maxHydratedKeyframes: 96,
 };
 
 const RUNTIME_PROFILES = {
   "phone-webgpu": {
     providers: ["webgpu", "wasm"],
-    wasmNumThreads: 6,
-    wasmAutoThreadMax: 6,
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
     deviceBaseline: "samsung-s23-plus",
     deviceCpuCoreTarget: 8,
-    webgpuBurstFrameConcurrency: 3,
-    webgpuCandidateHydrationConcurrency: 6,
-    candidateHydrationConcurrency: 6,
-    wasmCandidateHydrationConcurrency: 6,
-    maxHydratedKeyframes: 64,
-    prefetchNeighborKeyframes: 3,
+    webgpuBurstFrameConcurrency: 4,
+    parallelBurstExtraction: false,
+    burstFrameExtractionConcurrency: 4,
+    parallelBurstFrameLimit: 5,
+    parallelBurstCandidatesPerFrame: 1,
+    webgpuCandidateHydrationConcurrency: 8,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -108,8 +116,8 @@ const RUNTIME_PROFILES = {
   },
   "phone-webnn-npu": {
     providers: ["webnn", "webgpu", "wasm"],
-    wasmNumThreads: 6,
-    wasmAutoThreadMax: 6,
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
     deviceBaseline: "samsung-s23-plus",
@@ -121,12 +129,16 @@ const RUNTIME_PROFILES = {
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
     webgpuAdapterFeatureLevels: ["core"],
     webgpuTryFallbackAdapter: true,
-    webgpuBurstFrameConcurrency: 3,
-    webgpuCandidateHydrationConcurrency: 6,
-    candidateHydrationConcurrency: 6,
-    wasmCandidateHydrationConcurrency: 6,
-    maxHydratedKeyframes: 64,
-    prefetchNeighborKeyframes: 3,
+    webgpuBurstFrameConcurrency: 4,
+    parallelBurstExtraction: false,
+    burstFrameExtractionConcurrency: 4,
+    parallelBurstFrameLimit: 5,
+    parallelBurstCandidatesPerFrame: 1,
+    webgpuCandidateHydrationConcurrency: 8,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
     xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_512_fixed.onnx",
@@ -144,20 +156,71 @@ const RUNTIME_PROFILES = {
     webgpuPreferredLayout: "NCHW",
     webgpuGraphCapture: true,
   },
+  "phone-s23-plus-max": {
+    providers: ["webnn", "webgpu", "wasm"],
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
+    wasmAutoThreadDivisor: 1,
+    wasmProxy: false,
+    deviceBaseline: "samsung-s23-plus-max",
+    deviceCpuCoreTarget: 8,
+    webnnDeviceType: "npu",
+    webnnPowerPreference: "high-performance",
+    webnnPreflightTimeoutMs: 10000,
+    webnnSessionCreateTimeoutMs: 60000,
+    webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+    webgpuAdapterFeatureLevels: ["core"],
+    webgpuTryFallbackAdapter: true,
+    webgpuBurstFrameConcurrency: 4,
+    parallelBurstExtraction: false,
+    burstFrameExtractionConcurrency: 4,
+    parallelBurstFrameLimit: 5,
+    parallelBurstCandidatesPerFrame: 1,
+    webgpuCandidateHydrationConcurrency: 8,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxAssetBufferCacheEntries: 256,
+    maxAssetBufferCacheBytes: 192 * 1024 * 1024,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
+    webgpuPreflightTimeoutMs: 10000,
+    webgpuSessionCreateTimeoutMs: 60000,
+    xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_384_fixed.onnx",
+    fallbackXFeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
+    maxModelSide: 640,
+    fixedInputWidth: 640,
+    fixedInputHeight: 640,
+    maxQueryFeatures: 384,
+    maxKeyframeFeatures: 384,
+    candidateLimit: 1,
+    fallbackCandidateLimit: 2,
+    maxCandidateLimit: 4,
+    maxLighterGluePairsPerBurst: 2,
+    adaptiveCandidateEscalation: true,
+    burstFrameOrder: "center-first",
+    webgpuPowerPreference: "high-performance",
+    webgpuPreferredLayout: "NCHW",
+    webgpuGraphCapture: true,
+    webgpuUsePreflightDevice: true,
+  },
   "phone-webgpu-fast": {
     providers: ["webgpu", "wasm"],
-    wasmNumThreads: 6,
-    wasmAutoThreadMax: 6,
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
     deviceBaseline: "samsung-s23-plus",
     deviceCpuCoreTarget: 8,
-    webgpuBurstFrameConcurrency: 3,
-    webgpuCandidateHydrationConcurrency: 6,
-    candidateHydrationConcurrency: 6,
-    wasmCandidateHydrationConcurrency: 6,
-    maxHydratedKeyframes: 64,
-    prefetchNeighborKeyframes: 3,
+    webgpuBurstFrameConcurrency: 4,
+    parallelBurstExtraction: false,
+    burstFrameExtractionConcurrency: 4,
+    parallelBurstFrameLimit: 5,
+    parallelBurstCandidatesPerFrame: 1,
+    webgpuCandidateHydrationConcurrency: 8,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -180,18 +243,22 @@ const RUNTIME_PROFILES = {
   },
   "phone-webgpu-quality": {
     providers: ["webgpu", "wasm"],
-    wasmNumThreads: 6,
-    wasmAutoThreadMax: 6,
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
     deviceBaseline: "samsung-s23-plus",
     deviceCpuCoreTarget: 8,
-    webgpuBurstFrameConcurrency: 3,
-    webgpuCandidateHydrationConcurrency: 6,
-    candidateHydrationConcurrency: 6,
-    wasmCandidateHydrationConcurrency: 6,
-    maxHydratedKeyframes: 64,
-    prefetchNeighborKeyframes: 3,
+    webgpuBurstFrameConcurrency: 4,
+    parallelBurstExtraction: true,
+    burstFrameExtractionConcurrency: 4,
+    parallelBurstFrameLimit: 5,
+    parallelBurstCandidatesPerFrame: 1,
+    webgpuCandidateHydrationConcurrency: 8,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -214,16 +281,16 @@ const RUNTIME_PROFILES = {
   },
   "phone-wasm": {
     providers: ["wasm"],
-    wasmNumThreads: 6,
-    wasmAutoThreadMax: 6,
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
     deviceBaseline: "samsung-s23-plus",
     deviceCpuCoreTarget: 8,
-    candidateHydrationConcurrency: 6,
-    wasmCandidateHydrationConcurrency: 6,
-    maxHydratedKeyframes: 64,
-    prefetchNeighborKeyframes: 3,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
     maxModelSide: 640,
     maxQueryFeatures: 384,
     maxKeyframeFeatures: 384,
@@ -231,16 +298,16 @@ const RUNTIME_PROFILES = {
   },
   "phone-wasm-safe": {
     providers: ["wasm"],
-    wasmNumThreads: 6,
-    wasmAutoThreadMax: 6,
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
     deviceBaseline: "samsung-s23-plus",
     deviceCpuCoreTarget: 8,
-    candidateHydrationConcurrency: 6,
-    wasmCandidateHydrationConcurrency: 6,
-    maxHydratedKeyframes: 64,
-    prefetchNeighborKeyframes: 3,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
     maxModelSide: 640,
     maxQueryFeatures: 384,
     maxKeyframeFeatures: 384,
@@ -252,18 +319,22 @@ const RUNTIME_PROFILES = {
   },
   "emulator-safe": {
     providers: ["webgpu", "wasm"],
-    wasmNumThreads: 6,
-    wasmAutoThreadMax: 6,
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
     deviceBaseline: "samsung-s23-plus",
     deviceCpuCoreTarget: 8,
-    webgpuBurstFrameConcurrency: 3,
-    webgpuCandidateHydrationConcurrency: 6,
-    candidateHydrationConcurrency: 6,
-    wasmCandidateHydrationConcurrency: 6,
-    maxHydratedKeyframes: 64,
-    prefetchNeighborKeyframes: 3,
+    webgpuBurstFrameConcurrency: 4,
+    parallelBurstExtraction: false,
+    burstFrameExtractionConcurrency: 4,
+    parallelBurstFrameLimit: 5,
+    parallelBurstCandidatesPerFrame: 1,
+    webgpuCandidateHydrationConcurrency: 8,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
     webgpuPreflightTimeoutMs: 8000,
     webgpuSessionCreateTimeoutMs: 45000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -286,8 +357,8 @@ const RUNTIME_PROFILES = {
   },
   "emulator-webnn-gpu": {
     providers: ["webnn", "webgpu", "wasm"],
-    wasmNumThreads: 6,
-    wasmAutoThreadMax: 6,
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
     deviceBaseline: "samsung-s23-plus-emulator-webnn-probe",
@@ -297,12 +368,16 @@ const RUNTIME_PROFILES = {
     webnnPreflightTimeoutMs: 10000,
     webnnSessionCreateTimeoutMs: 60000,
     webnnUseWebGpuDevice: true,
-    webgpuBurstFrameConcurrency: 3,
-    webgpuCandidateHydrationConcurrency: 6,
-    candidateHydrationConcurrency: 6,
-    wasmCandidateHydrationConcurrency: 6,
-    maxHydratedKeyframes: 64,
-    prefetchNeighborKeyframes: 3,
+    webgpuBurstFrameConcurrency: 4,
+    parallelBurstExtraction: false,
+    burstFrameExtractionConcurrency: 4,
+    parallelBurstFrameLimit: 5,
+    parallelBurstCandidatesPerFrame: 1,
+    webgpuCandidateHydrationConcurrency: 8,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
     webgpuPreflightTimeoutMs: 8000,
     webgpuSessionCreateTimeoutMs: 45000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -335,14 +410,14 @@ const RUNTIME_PROFILES = {
   },
   "wasm-fast": {
     providers: ["wasm"],
-    wasmNumThreads: 6,
-    wasmAutoThreadMax: 6,
+    wasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
-    candidateHydrationConcurrency: 6,
-    wasmCandidateHydrationConcurrency: 6,
-    maxHydratedKeyframes: 64,
-    prefetchNeighborKeyframes: 3,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxHydratedKeyframes: 96,
+    prefetchNeighborKeyframes: 5,
     maxModelSide: 640,
     maxQueryFeatures: 384,
     maxKeyframeFeatures: 384,
@@ -475,6 +550,11 @@ function runtimeDiagnostics() {
     deviceBaseline: state.options.deviceBaseline || DEFAULTS.deviceBaseline,
     deviceCpuCoreTarget: Number(state.options.deviceCpuCoreTarget || DEFAULTS.deviceCpuCoreTarget),
     webgpuBurstFrameConcurrency: Number(state.options.webgpuBurstFrameConcurrency || DEFAULTS.webgpuBurstFrameConcurrency),
+    parallelBurstExtraction: Boolean(state.options.parallelBurstExtraction),
+    burstFrameExtractionConcurrency: Number(state.options.burstFrameExtractionConcurrency || DEFAULTS.burstFrameExtractionConcurrency),
+    effectiveBurstFrameExtractionConcurrency: burstFrameExtractionConcurrencyForProvider(state.provider, state.options),
+    parallelBurstFrameLimit: Number(state.options.parallelBurstFrameLimit || DEFAULTS.parallelBurstFrameLimit),
+    parallelBurstCandidatesPerFrame: Number(state.options.parallelBurstCandidatesPerFrame || DEFAULTS.parallelBurstCandidatesPerFrame),
     webgpuCandidateHydrationConcurrency: Number(state.options.webgpuCandidateHydrationConcurrency || DEFAULTS.webgpuCandidateHydrationConcurrency),
     candidateHydrationConcurrency: Number(state.options.candidateHydrationConcurrency || DEFAULTS.candidateHydrationConcurrency),
     wasmCandidateHydrationConcurrency: Number(state.options.wasmCandidateHydrationConcurrency || DEFAULTS.wasmCandidateHydrationConcurrency),
@@ -595,6 +675,10 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
     "retrievalConfidenceThreshold",
     "maxLighterGluePairsPerBurst",
     "burstFrameOrder",
+    "parallelBurstExtraction",
+    "burstFrameExtractionConcurrency",
+    "parallelBurstFrameLimit",
+    "parallelBurstCandidatesPerFrame",
     "xfeatUrl",
     "fallbackXFeatUrl",
     "webgpuPowerPreference",
@@ -1413,16 +1497,21 @@ async function localizeBurst(payload) {
     remaining: Math.max(1, Number(options.maxLighterGluePairsPerBurst || DEFAULTS.maxLighterGluePairsPerBurst)),
   };
 
-  for (const frame of orderBurstFrames(frames, options)) {
-    if (matcherBudget.remaining <= 0) break;
-    const frameResult = await localizeFrame(frame, options, matcherBudget);
-    frameResults.push(frameResult);
-    if (options.stopBurstAfterAcceptedCandidate !== false) {
-      const acceptedFrame = frameResult.status === "ready"
-        && frameResult.matchCount >= Number(options.minMatches)
-        && frameResult.inlierCount >= Number(options.minInliers)
-        && frameResult.confidence >= Number(options.minConfidence);
-      if (acceptedFrame) break;
+  const orderedFrames = orderBurstFrames(frames, options);
+  if (shouldUseParallelBurstExtraction(orderedFrames, options)) {
+    frameResults.push(...await localizeBurstParallel(orderedFrames, options, matcherBudget));
+  } else {
+    for (const frame of orderedFrames) {
+      if (matcherBudget.remaining <= 0) break;
+      const frameResult = await localizeFrame(frame, options, matcherBudget);
+      frameResults.push(frameResult);
+      if (options.stopBurstAfterAcceptedCandidate !== false) {
+        const acceptedFrame = frameResult.status === "ready"
+          && frameResult.matchCount >= Number(options.minMatches)
+          && frameResult.inlierCount >= Number(options.minInliers)
+          && frameResult.confidence >= Number(options.minConfidence);
+        if (acceptedFrame) break;
+      }
     }
   }
 
@@ -1454,6 +1543,9 @@ async function localizeBurst(payload) {
     lighterGluePairsTried: matcherBudget.tried,
     lighterGluePairBudget: matcherBudget.max,
     burstFrameOrder: options.burstFrameOrder || DEFAULTS.burstFrameOrder,
+    parallelBurstExtraction: Boolean(options.parallelBurstExtraction),
+    burstFrameExtractionConcurrency: Number(options.burstFrameExtractionConcurrency || DEFAULTS.burstFrameExtractionConcurrency),
+    effectiveBurstFrameExtractionConcurrency: burstFrameExtractionConcurrencyForProvider(state.provider, options),
     best,
     frameBest,
     fusedBest,
@@ -1467,6 +1559,172 @@ async function localizeBurst(payload) {
     elapsedMs: roundMs(performance.now() - started),
     reason: accepted ? "accepted" : rejectionReason(best, options),
   };
+}
+
+function shouldUseParallelBurstExtraction(frames, options) {
+  return Boolean(options.parallelBurstExtraction)
+    && Array.isArray(frames)
+    && frames.length > 1
+    && Number(options.maxLighterGluePairsPerBurst || DEFAULTS.maxLighterGluePairsPerBurst) > 0;
+}
+
+async function localizeBurstParallel(frames, options, matcherBudget) {
+  const selectedFrames = frames.slice(0, Math.max(1, Number(options.parallelBurstFrameLimit || DEFAULTS.parallelBurstFrameLimit)));
+  const extractionConcurrency = burstFrameExtractionConcurrencyForProvider(state.provider, options);
+  const extractedFrames = await mapWithConcurrency(
+    selectedFrames,
+    extractionConcurrency,
+    async (frame, frameOrderIndex) => {
+      const started = performance.now();
+      const imageData = normalizeImageData(frame.imageData || frame);
+      const extracted = await runXFeat(imageData, options);
+      const shortlist = shortlistKeyframes(extracted, options, frame);
+      return {
+        frame,
+        frameOrderIndex,
+        imageData,
+        extracted,
+        shortlist,
+        elapsedMs: roundMs(performance.now() - started),
+      };
+    },
+  );
+
+  const keyframeLimitPerFrame = Math.max(1, Number(options.parallelBurstCandidatesPerFrame || options.candidateLimit || DEFAULTS.parallelBurstCandidatesPerFrame));
+  const pairPool = [];
+  for (const entry of extractedFrames) {
+    const keyframes = (entry.shortlist.keyframes || []).slice(0, keyframeLimitPerFrame);
+    keyframes.forEach((keyframe, rank) => {
+      pairPool.push({
+        entry,
+        keyframe,
+        rank,
+        score: cheapBurstPairScore(entry, rank),
+      });
+    });
+  }
+  pairPool.sort((left, right) => left.score - right.score);
+
+  const pairLimit = Math.max(1, matcherBudget ? matcherBudget.remaining : Number(options.maxLighterGluePairsPerBurst || DEFAULTS.maxLighterGluePairsPerBurst));
+  const pairsToTry = pairPool.slice(0, pairLimit);
+  const uniqueKeyframes = uniqueById(pairsToTry.map((pair) => pair.keyframe));
+  const hydrationStarted = performance.now();
+  const hydrated = await mapWithConcurrency(
+    uniqueKeyframes,
+    Math.max(1, Math.min(8, hydrationConcurrencyForProvider(state.provider, options))),
+    (keyframe) => ensureHydratedKeyframe(keyframe),
+  );
+  const hydratedById = new Map(hydrated.map((keyframe) => [String(keyframe.id), keyframe]));
+  const hydrationElapsedMs = roundMs(performance.now() - hydrationStarted);
+
+  const perFrame = new Map(extractedFrames.map((entry) => [entry, {
+    status: "failed",
+    frameIndex: entry.frame.frameIndex ?? null,
+    detectedKeypoints: entry.extracted.count,
+    shortlistStrategy: entry.shortlist.strategy,
+    shortlistConfidence: entry.shortlist.confidence,
+    shortlistEscalated: entry.shortlist.escalated,
+    candidateKeyframes: [],
+    candidateResults: [],
+    lighterGluePairsTried: 0,
+    matcherBudgetRemaining: matcherBudget ? matcherBudget.remaining : null,
+    timings: {
+      xfeatElapsedMs: entry.extracted.elapsedMs,
+      preprocessElapsedMs: entry.extracted.preprocessElapsedMs,
+      xfeatInferenceElapsedMs: entry.extracted.inferenceElapsedMs,
+      retrievalElapsedMs: entry.shortlist.elapsedMs,
+      hydrationElapsedMs,
+      lighterGlueElapsedMs: 0,
+      pnpElapsedMs: 0,
+    },
+    elapsedMs: entry.elapsedMs,
+    reason: "No candidate keyframe produced a valid PnP solution.",
+  }]));
+
+  for (const pair of pairsToTry) {
+    if (matcherBudget && matcherBudget.remaining <= 0) break;
+    const keyframe = hydratedById.get(String(pair.keyframe.id));
+    if (!keyframe) continue;
+    if (matcherBudget) {
+      matcherBudget.tried += 1;
+      matcherBudget.remaining -= 1;
+    }
+    const frameResult = perFrame.get(pair.entry);
+    frameResult.candidateKeyframes.push(keyframe.id);
+    const matched = await runLighterGlue(pair.entry.extracted, keyframe, options);
+    const candidate = solvePnpForMatches(matched, keyframe, pair.entry.extracted, pair.entry.frame.frameIndex ?? null, options);
+    candidate.parallelBurstExtraction = true;
+    candidate.burstFrameOrderIndex = pair.entry.frameOrderIndex;
+    candidate.shortlistRank = pair.rank;
+    frameResult.candidateResults.push(candidate);
+    frameResult.lighterGluePairsTried += 1;
+    frameResult.matcherBudgetRemaining = matcherBudget ? matcherBudget.remaining : null;
+    frameResult.timings.lighterGlueElapsedMs = roundMs(Number(frameResult.timings.lighterGlueElapsedMs || 0) + Number(candidate.matcherElapsedMs || 0));
+    frameResult.timings.pnpElapsedMs = roundMs(Number(frameResult.timings.pnpElapsedMs || 0) + Number(candidate.pnpElapsedMs || 0));
+    const meetsGate = candidate.status === "ready"
+      && candidate.matchCount >= Number(options.minMatches)
+      && candidate.inlierCount >= Number(options.minInliers)
+      && candidate.confidence >= Number(options.minConfidence);
+    if (options.stopBurstAfterAcceptedCandidate !== false && meetsGate) break;
+  }
+
+  return extractedFrames.map((entry) => finalizeParallelFrameResult(perFrame.get(entry), entry));
+}
+
+function cheapBurstPairScore(entry, rank) {
+  const retrievalPenalty = Math.max(0, 1 - Number(entry.shortlist.confidence || 0)) * 0.1;
+  const keypointPenalty = entry.extracted.count ? Math.max(0, 384 - entry.extracted.count) / 10000 : 1;
+  return Number(rank || 0) + retrievalPenalty + keypointPenalty + Number(entry.frameOrderIndex || 0) * 0.01;
+}
+
+function uniqueById(items) {
+  const out = [];
+  const seen = new Set();
+  for (const item of items || []) {
+    const id = String(item?.id ?? "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push(item);
+  }
+  return out;
+}
+
+function finalizeParallelFrameResult(frameResult, entry) {
+  const best = (frameResult.candidateResults || [])
+    .filter((result) => result.status === "ready")
+    .sort((a, b) => scoreLocalization(b) - scoreLocalization(a))[0] || null;
+  const elapsedMs = roundMs(Number(entry.elapsedMs || 0) + Number(frameResult.timings.lighterGlueElapsedMs || 0) + Number(frameResult.timings.pnpElapsedMs || 0));
+  if (!best) {
+    return {
+      ...frameResult,
+      elapsedMs,
+      reason: frameResult.candidateResults.length
+        ? "Parallel burst candidates did not produce an accepted PnP solution."
+        : "Parallel burst extraction found no candidate pairs within the LighterGlue budget.",
+    };
+  }
+  return {
+    ...best,
+    detectedKeypoints: entry.extracted.count,
+    shortlistStrategy: entry.shortlist.strategy,
+    shortlistConfidence: entry.shortlist.confidence,
+    shortlistEscalated: entry.shortlist.escalated,
+    candidateKeyframes: frameResult.candidateKeyframes,
+    candidateResults: frameResult.candidateResults,
+    lighterGluePairsTried: frameResult.lighterGluePairsTried,
+    matcherBudgetRemaining: frameResult.matcherBudgetRemaining,
+    timings: frameResult.timings,
+    elapsedMs,
+  };
+}
+
+function burstFrameExtractionConcurrencyForProvider(provider, options) {
+  const generic = Math.max(1, Number(options.burstFrameExtractionConcurrency || DEFAULTS.burstFrameExtractionConcurrency));
+  // ONNX Runtime Web InferenceSession.run is not reentrant in the browser worker:
+  // overlapping runs on one XFeat session fail with "Session already started".
+  // Keep extraction planning burst-aware, but serialize model inference until a
+  // deliberate multi-session pool is introduced and memory-profiled on device.
+  return 1;
 }
 
 async function warmupRuntime(payload) {

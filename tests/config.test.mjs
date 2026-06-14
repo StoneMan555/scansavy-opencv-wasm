@@ -50,9 +50,17 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.ok(config.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.webgpu.min.js"));
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].providers, ["webnn", "webgpu", "wasm"]);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].webnnDeviceType, "gpu");
+  assert.deepEqual(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].providers, ["webnn", "webgpu", "wasm"]);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].wasmNumThreads, 8);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].candidateHydrationConcurrency, 8);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].parallelBurstExtraction, false);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].burstFrameExtractionConcurrency, 4);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-webgpu-quality"].parallelBurstExtraction, true);
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["emulator-safe"].webgpuAdapterFeatureLevels, ["core", "compatibility"]);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].fixedInputWidth, 640);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].fixedInputHeight, 640);
+  assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].wasmNumThreads, 8);
+  assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].parallelBurstExtraction, false);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].webgpuUsePreflightDevice, true);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-webgpu-fast"].webgpuUsePreflightDevice, true);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].webnnUseWebGpuDevice, true);
