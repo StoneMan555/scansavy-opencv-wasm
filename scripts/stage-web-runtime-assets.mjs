@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,6 +38,8 @@ for (const [fromRelative, toRelative, required] of copies) {
   }
   mkdirSync(dirname(to), { recursive: true });
   copyFileSync(from, to);
+  rmSync(`${to}.br`, { force: true });
+  rmSync(`${to}.gz`, { force: true });
   staged.push({ path: toRelative, bytes: statSync(to).size });
 }
 
@@ -57,6 +59,8 @@ for (const name of ortSidecars) {
   const to = join(dist, name);
   if (!existsSync(from)) continue;
   copyFileSync(from, to);
+  rmSync(`${to}.br`, { force: true });
+  rmSync(`${to}.gz`, { force: true });
   staged.push({ path: name, bytes: statSync(to).size, source: "ort-root-compat" });
 }
 

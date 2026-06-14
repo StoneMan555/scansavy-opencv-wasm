@@ -56,6 +56,8 @@ Static export hosts must add those headers outside Next.js. The ScanSavvy dev st
 
 `phone-webnn-npu` is intentionally a physical-device probe. Android emulators may expose `navigator.gpu` without a usable adapter and generally do not expose `navigator.ml.createContext`; in that case the worker records the failed provider attempts and falls back to the same WASM lane. `emulator-webnn-gpu` exists only to test whether an emulator Chrome build exposes WebNN when started with WebNN feature flags. Treat a fallback result as useful evidence, not a failure of the relocalizer.
 
+The WebGPU preflight now sweeps adapter request variants and reports the exact failure point. Phone profiles try the normal high-performance core adapter first. Emulator profiles also try compatibility-level and fallback adapter requests so ScanSavvy can distinguish "Chrome exposes `navigator.gpu`" from "Chrome can actually return a usable adapter for ONNX Runtime WebGPU." The WebNN probe can optionally request a WebNN context through a WebGPU device for diagnosing future WebNN/WebGPU interop.
+
 The runtime also uses a center-first burst schedule by default. For a 5-frame relocalization burst it tries the middle frame first, then expands outward only when more evidence is needed. This keeps the native-cadence burst available for recovery without paying the XFeat/LighterGlue cost for every frame when the first representative frame already solves.
 
 Performance policy follows the current browser-localization architecture:

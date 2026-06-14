@@ -50,11 +50,27 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.ok(config.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.webgpu.min.js"));
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].providers, ["webnn", "webgpu", "wasm"]);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].webnnDeviceType, "gpu");
+  assert.deepEqual(config.onnxRuntime.runtimeProfiles["emulator-safe"].webgpuAdapterFeatureLevels, ["core", "compatibility"]);
+  assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].fixedInputWidth, 640);
+  assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].fixedInputHeight, 640);
+  assert.equal(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].webnnUseWebGpuDevice, true);
 });
 
 test("High-quality runtime worker exposes XFeat/LighterGlue and projection messages", () => {
   const worker = readFileSync(join(root, "src", "web", "scansavy-relocalization-runtime-worker.js"), "utf8");
-  for (const token of ["init", "loadMapPack", "localizeBurst", "projectAnchors", "xfeat-lg-v0", "solvePnPRansac", "lighterGlueScoreThreshold"]) {
+  for (const token of [
+    "init",
+    "ping",
+    "loadMapPack",
+    "localizeBurst",
+    "projectAnchors",
+    "xfeat-lg-v0",
+    "solvePnPRansac",
+    "lighterGlueScoreThreshold",
+    "requestWebGpuAdapter",
+    "inferXFeatInputShape",
+    "webgpu-adapter-sweep-v2",
+  ]) {
     assert.match(worker, new RegExp(token));
   }
 });

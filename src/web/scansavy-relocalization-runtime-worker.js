@@ -1,5 +1,7 @@
 /* global cv, ort, importScripts, OffscreenCanvas, ImageData */
 
+const RUNTIME_ADAPTER_DIAGNOSTICS_VERSION = "webgpu-adapter-sweep-v2";
+
 const DEFAULTS = {
   manifestUrl: "/scansavy-relocalization-runtime/manifest.json",
   ortAllUrl: "/scansavy-relocalization-runtime/ort/ort.all.min.js",
@@ -62,8 +64,12 @@ const DEFAULTS = {
   webnnSessionCreateTimeoutMs: 60000,
   wasmSessionCreateTimeoutMs: 90000,
   webgpuPowerPreference: "high-performance",
+  webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+  webgpuAdapterFeatureLevels: ["core", "compatibility"],
+  webgpuTryFallbackAdapter: true,
   webnnDeviceType: "npu",
   webnnPowerPreference: "high-performance",
+  webnnUseWebGpuDevice: false,
   webgpuPreferredLayout: "NCHW",
   webgpuGraphCapture: false,
   webgpuForceFallbackAdapter: false,
@@ -89,6 +95,9 @@ const RUNTIME_PROFILES = {
     prefetchNeighborKeyframes: 3,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
+    webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+    webgpuAdapterFeatureLevels: ["core"],
+    webgpuTryFallbackAdapter: true,
     maxModelSide: 640,
     maxQueryFeatures: 512,
     maxKeyframeFeatures: 384,
@@ -108,6 +117,9 @@ const RUNTIME_PROFILES = {
     webnnPowerPreference: "high-performance",
     webnnPreflightTimeoutMs: 10000,
     webnnSessionCreateTimeoutMs: 60000,
+    webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+    webgpuAdapterFeatureLevels: ["core"],
+    webgpuTryFallbackAdapter: true,
     webgpuBurstFrameConcurrency: 3,
     webgpuCandidateHydrationConcurrency: 6,
     candidateHydrationConcurrency: 6,
@@ -147,6 +159,9 @@ const RUNTIME_PROFILES = {
     prefetchNeighborKeyframes: 3,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
+    webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+    webgpuAdapterFeatureLevels: ["core"],
+    webgpuTryFallbackAdapter: true,
     xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_384_fixed.onnx",
     fallbackXFeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
     maxModelSide: 640,
@@ -178,6 +193,9 @@ const RUNTIME_PROFILES = {
     prefetchNeighborKeyframes: 3,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
+    webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+    webgpuAdapterFeatureLevels: ["core"],
+    webgpuTryFallbackAdapter: true,
     xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_512_fixed.onnx",
     fallbackXFeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
     maxModelSide: 640,
@@ -247,6 +265,9 @@ const RUNTIME_PROFILES = {
     prefetchNeighborKeyframes: 3,
     webgpuPreflightTimeoutMs: 8000,
     webgpuSessionCreateTimeoutMs: 45000,
+    webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+    webgpuAdapterFeatureLevels: ["core", "compatibility"],
+    webgpuTryFallbackAdapter: true,
     xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_512_fixed.onnx",
     fallbackXFeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
     maxModelSide: 640,
@@ -274,6 +295,7 @@ const RUNTIME_PROFILES = {
     webnnPowerPreference: "high-performance",
     webnnPreflightTimeoutMs: 10000,
     webnnSessionCreateTimeoutMs: 60000,
+    webnnUseWebGpuDevice: true,
     webgpuBurstFrameConcurrency: 3,
     webgpuCandidateHydrationConcurrency: 6,
     candidateHydrationConcurrency: 6,
@@ -282,6 +304,9 @@ const RUNTIME_PROFILES = {
     prefetchNeighborKeyframes: 3,
     webgpuPreflightTimeoutMs: 8000,
     webgpuSessionCreateTimeoutMs: 45000,
+    webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+    webgpuAdapterFeatureLevels: ["core", "compatibility"],
+    webgpuTryFallbackAdapter: true,
     xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_384_fixed.onnx",
     fallbackXFeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
     maxModelSide: 640,
@@ -342,6 +367,8 @@ const state = {
   ortScriptsLoaded: new Set(),
   providerAttempts: [],
   wasmConfig: null,
+  webgpuPreflightDiagnostics: null,
+  webnnPreflightDiagnostics: null,
   warmedUp: false,
   warmupSummary: null,
   assetBufferCache: new Map(),
@@ -354,6 +381,10 @@ self.onmessage = async (event) => {
     if (type === "init") {
       const result = await initRuntime(payload || {});
       reply(id, type, result);
+      return;
+    }
+    if (type === "ping") {
+      reply(id, type, runtimeWorkerBuildInfo());
       return;
     }
     if (type === "loadMapPack") {
@@ -383,6 +414,7 @@ self.onmessage = async (event) => {
       error: String(error?.message || error),
       stack: error?.stack || null,
       providerAttempts: error?.providerAttempts || null,
+      runtimeDiagnostics: runtimeDiagnostics(),
     });
   }
 };
@@ -391,17 +423,35 @@ function reply(id, type, payload) {
   self.postMessage({ id, type, payload });
 }
 
+function runtimeWorkerBuildInfo() {
+  return {
+    status: "ready",
+    adapterDiagnosticsVersion: RUNTIME_ADAPTER_DIAGNOSTICS_VERSION,
+    workerLocation: String(self.location?.href || ""),
+    crossOriginIsolated: Boolean(self.crossOriginIsolated),
+    hasSharedArrayBuffer: typeof SharedArrayBuffer !== "undefined",
+    hasWebGpu: Boolean(self.navigator?.gpu),
+    hasWebNn: Boolean(self.navigator?.ml),
+    hardwareConcurrency: Number(self.navigator?.hardwareConcurrency || 0),
+    runtimeProfile: state.options.runtimeProfile || state.options.profile || null,
+    provider: state.provider || null,
+    diagnostics: runtimeDiagnostics(),
+  };
+}
+
 function runtimeDiagnostics() {
   return {
     runtimeProfile: state.options.runtimeProfile || state.options.profile || "phone-webgpu",
     provider: state.provider,
     providerAttempts: state.providerAttempts,
+    adapterDiagnosticsVersion: RUNTIME_ADAPTER_DIAGNOSTICS_VERSION,
     crossOriginIsolated: Boolean(self.crossOriginIsolated),
     hasSharedArrayBuffer: typeof SharedArrayBuffer !== "undefined",
     hasWebGpu: Boolean(self.navigator?.gpu),
     hasWebNn: Boolean(self.navigator?.ml),
     hardwareConcurrency: Number(self.navigator?.hardwareConcurrency || 0),
     maxModelSide: Number(state.options.maxModelSide || DEFAULTS.maxModelSide),
+    xfeatUrl: state.options.xfeatUrl || DEFAULTS.xfeatUrl,
     fixedInputWidth: Number(state.options.fixedInputWidth || 0),
     fixedInputHeight: Number(state.options.fixedInputHeight || 0),
     maxQueryFeatures: Number(state.options.maxQueryFeatures || state.options.topK || DEFAULTS.maxQueryFeatures),
@@ -427,8 +477,18 @@ function runtimeDiagnostics() {
     hydratedAssetCacheBytes: state.assetBufferCacheBytes,
     prefetchNeighborKeyframes: Number(state.options.prefetchNeighborKeyframes || DEFAULTS.prefetchNeighborKeyframes),
     webgpuPowerPreference: state.options.webgpuPowerPreference || DEFAULTS.webgpuPowerPreference,
+    webgpuAdapterPowerPreferences: normalizeList(
+      state.options.webgpuAdapterPowerPreferences || DEFAULTS.webgpuAdapterPowerPreferences,
+    ),
+    webgpuAdapterFeatureLevels: normalizeList(
+      state.options.webgpuAdapterFeatureLevels || DEFAULTS.webgpuAdapterFeatureLevels,
+    ),
+    webgpuTryFallbackAdapter: state.options.webgpuTryFallbackAdapter !== false,
+    webgpuPreflightDiagnostics: state.webgpuPreflightDiagnostics,
     webnnDeviceType: state.options.webnnDeviceType || DEFAULTS.webnnDeviceType,
     webnnPowerPreference: state.options.webnnPowerPreference || DEFAULTS.webnnPowerPreference,
+    webnnUseWebGpuDevice: Boolean(state.options.webnnUseWebGpuDevice),
+    webnnPreflightDiagnostics: state.webnnPreflightDiagnostics,
     webgpuPreferredLayout: state.options.webgpuPreferredLayout || DEFAULTS.webgpuPreferredLayout,
     webgpuGraphCapture: Boolean(state.options.webgpuGraphCapture),
     webgpuPreflight: state.options.webgpuPreflight !== false,
@@ -469,6 +529,7 @@ async function initRuntime(payload) {
   state.warmedUp = false;
   state.warmupSummary = null;
   applyProfileDefaults(profileOptions, profileOverrideKeys);
+  applyModelShapeDefaults(state.options);
   state.ort = await loadOrt(state.options);
   state.opencv = await loadOpenCv(state.options.opencvJsUrl, state.options.fallbackOpenCvJsUrl);
 
@@ -527,8 +588,12 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
     "xfeatUrl",
     "fallbackXFeatUrl",
     "webgpuPowerPreference",
+    "webgpuAdapterPowerPreferences",
+    "webgpuAdapterFeatureLevels",
+    "webgpuTryFallbackAdapter",
     "webnnDeviceType",
     "webnnPowerPreference",
+    "webnnUseWebGpuDevice",
     "webgpuPreferredLayout",
     "webgpuGraphCapture",
     "webnnPreflightTimeoutMs",
@@ -543,6 +608,24 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
       state.options[key] = profileOptions[key];
     }
   }
+}
+
+function applyModelShapeDefaults(options) {
+  const shape = inferXFeatInputShape(options.xfeatUrl || DEFAULTS.xfeatUrl);
+  if (!shape) return;
+  if (!Number(options.fixedInputWidth)) options.fixedInputWidth = shape.width;
+  if (!Number(options.fixedInputHeight)) options.fixedInputHeight = shape.height;
+  options.maxModelSide = Math.max(Number(options.maxModelSide || 0), shape.width, shape.height);
+}
+
+function inferXFeatInputShape(url) {
+  const value = String(url || "").toLowerCase();
+  if (!value.includes("xfeat") || !value.includes("fixed")) return null;
+  const explicit = value.match(/(\d{3,4})x(\d{3,4})/);
+  if (explicit) {
+    return { width: Number(explicit[1]), height: Number(explicit[2]) };
+  }
+  return { width: 640, height: 640 };
 }
 
 async function loadOrt(options) {
@@ -561,6 +644,14 @@ async function createSessions(providers) {
   const attempts = [];
   for (const provider of providers) {
     try {
+      if (provider === "webgpu") {
+        state.webgpuPreflightDiagnostics = {
+          status: "pending",
+          version: RUNTIME_ADAPTER_DIAGNOSTICS_VERSION,
+          provider,
+          requested: state.options.webgpuPreflight !== false,
+        };
+      }
       if (provider === "webnn" && state.options.webnnPreflight !== false) {
         await withTimeout(
           preflightWebNn(state.options),
@@ -569,11 +660,15 @@ async function createSessions(providers) {
         );
       }
       if (provider === "webgpu" && state.options.webgpuPreflight !== false) {
-        await withTimeout(
+        const webgpuPreflight = await withTimeout(
           preflightWebGpu(state.options),
           Number(state.options.webgpuPreflightTimeoutMs || DEFAULTS.webgpuPreflightTimeoutMs),
           "WebGPU preflight",
         );
+        if (webgpuPreflight?.selectedRequestOptions?.forceFallbackAdapter) {
+          state.options.webgpuForceFallbackAdapter = true;
+        }
+        configureOrtWebGpu(state.ort, state.options);
       }
       loadOrtScript(provider, state.options);
       const sessionStarted = performance.now();
@@ -601,7 +696,17 @@ async function createSessions(providers) {
       state.providerAttempts = attempts;
       return { providerAttempts: attempts };
     } catch (error) {
-      attempts.push({ provider, status: "failed", error: String(error?.message || error) });
+      const errorText = String(error?.message || error);
+      attempts.push({
+        provider,
+        status: "failed",
+        error:
+          provider === "webgpu"
+            ? `${errorText} adapterDiagnosticsVersion=${RUNTIME_ADAPTER_DIAGNOSTICS_VERSION} webgpuPreflightDiagnostics=${safeJsonStringify(
+                state.webgpuPreflightDiagnostics,
+              )}`
+            : errorText,
+      });
       state.providerAttempts = attempts;
     }
   }
@@ -653,34 +758,200 @@ async function createXFeatSession(sessionOptions) {
 }
 
 async function preflightWebGpu(options) {
+  state.webgpuPreflightDiagnostics = null;
   const gpu = self.navigator?.gpu;
   if (!gpu?.requestAdapter) {
+    state.webgpuPreflightDiagnostics = {
+      status: "failed",
+      reason: "requestAdapter-unavailable",
+      version: RUNTIME_ADAPTER_DIAGNOSTICS_VERSION,
+      attempts: [],
+    };
     throw new Error("WebGPU preflight failed: navigator.gpu.requestAdapter is unavailable.");
   }
-  const adapter = await gpu.requestAdapter({
-    powerPreference: options.webgpuPowerPreference || DEFAULTS.webgpuPowerPreference,
-  });
-  if (!adapter) {
-    throw new Error("WebGPU preflight failed: no GPU adapter returned.");
+  const result = await requestWebGpuAdapter(options);
+  state.webgpuPreflightDiagnostics = result.diagnostics;
+  if (!result.adapter) {
+    throw new Error(
+      `WebGPU adapter sweep ${RUNTIME_ADAPTER_DIAGNOSTICS_VERSION} failed: no GPU adapter returned. ${summarizeAdapterAttempts(result.diagnostics)}`,
+    );
   }
-  return true;
+  return result.diagnostics;
 }
 
 async function preflightWebNn(options) {
+  state.webnnPreflightDiagnostics = null;
   const ml = self.navigator?.ml;
   if (!ml?.createContext) {
+    state.webnnPreflightDiagnostics = {
+      status: "failed",
+      reason: "createContext-unavailable",
+      webgpuBridgeRequested: Boolean(options.webnnUseWebGpuDevice),
+    };
     throw new Error("WebNN preflight failed: navigator.ml.createContext is unavailable.");
   }
   const contextOptions = {
     deviceType: options.webnnDeviceType || DEFAULTS.webnnDeviceType,
     powerPreference: options.webnnPowerPreference || DEFAULTS.webnnPowerPreference,
   };
-  const context = await ml.createContext(contextOptions);
+  let context;
+  let bridgeDiagnostics = null;
+  if (options.webnnUseWebGpuDevice) {
+    const adapterResult = await requestWebGpuAdapter(options);
+    bridgeDiagnostics = adapterResult.diagnostics;
+    if (!adapterResult.adapter?.requestDevice) {
+      state.webnnPreflightDiagnostics = {
+        status: "failed",
+        reason: "webgpu-bridge-adapter-unavailable",
+        contextOptions,
+        webgpuBridge: bridgeDiagnostics,
+      };
+      throw new Error(`WebNN preflight failed: WebGPU bridge adapter unavailable. ${summarizeAdapterAttempts(bridgeDiagnostics)}`);
+    }
+    const device = await adapterResult.adapter.requestDevice();
+    context = await ml.createContext(device);
+  } else {
+    context = await ml.createContext(contextOptions);
+  }
   if (!context) {
+    state.webnnPreflightDiagnostics = {
+      status: "failed",
+      reason: "no-context-returned",
+      contextOptions,
+      webgpuBridge: bridgeDiagnostics,
+    };
     throw new Error("WebNN preflight failed: no ML context returned.");
   }
+  state.webnnPreflightDiagnostics = {
+    status: "ready",
+    contextOptions,
+    webgpuBridgeRequested: Boolean(options.webnnUseWebGpuDevice),
+    webgpuBridge: bridgeDiagnostics,
+  };
   if (typeof context.close === "function") context.close();
   return { deviceType: contextOptions.deviceType };
+}
+
+async function requestWebGpuAdapter(options) {
+  const gpu = self.navigator?.gpu;
+  const attempts = [];
+  if (!gpu?.requestAdapter) {
+    return {
+      adapter: null,
+      diagnostics: {
+        status: "failed",
+        reason: "requestAdapter-unavailable",
+        version: RUNTIME_ADAPTER_DIAGNOSTICS_VERSION,
+        attempts,
+      },
+    };
+  }
+  const powerPreferences = normalizeList(
+    options.webgpuAdapterPowerPreferences || options.webgpuPowerPreference || DEFAULTS.webgpuAdapterPowerPreferences,
+  );
+  const featureLevels = normalizeList(options.webgpuAdapterFeatureLevels || DEFAULTS.webgpuAdapterFeatureLevels);
+  const fallbackModes = options.webgpuTryFallbackAdapter === false ? [false] : [false, true];
+  const seen = new Set();
+  for (const featureLevel of featureLevels) {
+    for (const powerPreference of powerPreferences) {
+      for (const forceFallbackAdapter of fallbackModes) {
+        const requestOptions = {};
+        if (powerPreference && powerPreference !== "default") requestOptions.powerPreference = powerPreference;
+        if (forceFallbackAdapter) requestOptions.forceFallbackAdapter = true;
+        if (featureLevel && featureLevel !== "core" && featureLevel !== "default") requestOptions.featureLevel = featureLevel;
+        const signature = JSON.stringify(requestOptions);
+        if (seen.has(signature)) continue;
+        seen.add(signature);
+        const started = performance.now();
+        try {
+          const adapter = await gpu.requestAdapter(requestOptions);
+          const attempt = {
+            requestOptions,
+            status: adapter ? "ready" : "null-adapter",
+            elapsedMs: roundMs(performance.now() - started),
+          };
+          if (adapter) {
+            attempt.adapterInfo = await readAdapterInfo(adapter);
+            attempts.push(attempt);
+            return {
+              adapter,
+              diagnostics: {
+                status: "ready",
+                version: RUNTIME_ADAPTER_DIAGNOSTICS_VERSION,
+                selectedRequestOptions: requestOptions,
+                selectedAdapterInfo: attempt.adapterInfo,
+                attempts,
+              },
+            };
+          }
+          attempts.push(attempt);
+        } catch (error) {
+          attempts.push({
+            requestOptions,
+            status: "failed",
+            error: String(error?.message || error),
+            elapsedMs: roundMs(performance.now() - started),
+          });
+        }
+      }
+    }
+  }
+  return {
+    adapter: null,
+    diagnostics: {
+      status: "failed",
+      reason: "no-adapter-returned",
+      version: RUNTIME_ADAPTER_DIAGNOSTICS_VERSION,
+      attempts,
+    },
+  };
+}
+
+async function readAdapterInfo(adapter) {
+  try {
+    const info = typeof adapter.requestAdapterInfo === "function"
+      ? await adapter.requestAdapterInfo()
+      : adapter.info || null;
+    if (!info) return null;
+    return {
+      vendor: info.vendor || "",
+      architecture: info.architecture || "",
+      device: info.device || "",
+      description: info.description || "",
+      subgroupMinSize: Number(info.subgroupMinSize || 0) || undefined,
+      subgroupMaxSize: Number(info.subgroupMaxSize || 0) || undefined,
+    };
+  } catch (error) {
+    return { error: String(error?.message || error) };
+  }
+}
+
+function normalizeList(value) {
+  if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function summarizeAdapterAttempts(diagnostics) {
+  const attempts = Array.isArray(diagnostics?.attempts) ? diagnostics.attempts : [];
+  if (!attempts.length) return `adapterAttempts=${diagnostics?.reason || "none"}`;
+  return `adapterAttempts=${attempts
+    .slice(0, 8)
+    .map((attempt) => {
+      const options = JSON.stringify(attempt.requestOptions || {});
+      return `${options}:${attempt.status}${attempt.error ? `:${attempt.error}` : ""}`;
+    })
+    .join(" | ")}`;
+}
+
+function safeJsonStringify(value) {
+  try {
+    return JSON.stringify(value || null);
+  } catch {
+    return "null";
+  }
 }
 
 function loadOrtScript(provider, options) {

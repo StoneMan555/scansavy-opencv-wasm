@@ -98,8 +98,17 @@ export interface ScanSavvyRuntimeInitOptions {
   lighterGlueUrl?: string;
   opencvJsUrl?: string;
   fallbackOpenCvJsUrl?: string;
-  providers?: Array<"webgpu" | "wasm">;
+  providers?: Array<"webnn" | "webgpu" | "wasm">;
+  webgpuPowerPreference?: "high-performance" | "low-power" | "default";
+  webgpuAdapterPowerPreferences?: Array<"high-performance" | "low-power" | "default">;
+  webgpuAdapterFeatureLevels?: Array<"core" | "compatibility">;
+  webgpuTryFallbackAdapter?: boolean;
+  webnnDeviceType?: "cpu" | "gpu" | "npu";
+  webnnPowerPreference?: "high-performance" | "low-power" | "default";
+  webnnUseWebGpuDevice?: boolean;
   maxModelSide?: number;
+  fixedInputWidth?: number;
+  fixedInputHeight?: number;
   padMultiple?: number;
   candidateLimit?: number;
   lighterGlueScoreThreshold?: number;
