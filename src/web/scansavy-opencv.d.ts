@@ -108,6 +108,7 @@ export interface ScanSavvyRuntimeInitOptions {
   webgpuGraphCapture?: boolean;
   webgpuUsePreflightDevice?: boolean;
   webgpuProfiling?: boolean;
+  webgpuWasmNumThreads?: number | "auto";
   webnnDeviceType?: "cpu" | "gpu" | "npu";
   webnnPowerPreference?: "high-performance" | "low-power" | "default";
   webnnUseWebGpuDevice?: boolean;

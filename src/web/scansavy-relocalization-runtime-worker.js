@@ -50,6 +50,7 @@ const DEFAULTS = {
   warmupCandidateLimit: 1,
   warmupMaxLighterGluePairs: 1,
   wasmNumThreads: "auto",
+  webgpuWasmNumThreads: 1,
   wasmAutoThreadMax: 8,
   wasmAutoThreadDivisor: 2,
   wasmProxy: false,
@@ -93,6 +94,7 @@ const RUNTIME_PROFILES = {
   "phone-webgpu": {
     providers: ["webgpu", "wasm"],
     wasmNumThreads: 8,
+    webgpuWasmNumThreads: 1,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -123,6 +125,7 @@ const RUNTIME_PROFILES = {
   "phone-webnn-npu": {
     providers: ["webnn", "webgpu", "wasm"],
     wasmNumThreads: 8,
+    webgpuWasmNumThreads: 1,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -165,6 +168,7 @@ const RUNTIME_PROFILES = {
   "phone-s23-plus-max": {
     providers: ["webnn", "webgpu", "wasm"],
     wasmNumThreads: 8,
+    webgpuWasmNumThreads: 1,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 1,
     wasmProxy: false,
@@ -212,6 +216,7 @@ const RUNTIME_PROFILES = {
   "phone-webgpu-fast": {
     providers: ["webgpu", "wasm"],
     wasmNumThreads: 8,
+    webgpuWasmNumThreads: 1,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -250,6 +255,7 @@ const RUNTIME_PROFILES = {
   "phone-webgpu-quality": {
     providers: ["webgpu", "wasm"],
     wasmNumThreads: 8,
+    webgpuWasmNumThreads: 1,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -326,6 +332,7 @@ const RUNTIME_PROFILES = {
   "emulator-safe": {
     providers: ["webgpu", "wasm"],
     wasmNumThreads: 8,
+    webgpuWasmNumThreads: 1,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -364,6 +371,7 @@ const RUNTIME_PROFILES = {
   "emulator-webnn-gpu": {
     providers: ["webnn", "webgpu", "wasm"],
     wasmNumThreads: 8,
+    webgpuWasmNumThreads: 1,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -436,6 +444,7 @@ const state = {
   manifest: null,
   ort: null,
   provider: null,
+  activeProvider: null,
   xfeatSession: null,
   lighterGlueSession: null,
   opencv: null,
@@ -640,6 +649,8 @@ function runtimeDiagnostics() {
     xfeatInferenceTimeoutMs: Number(state.options.xfeatInferenceTimeoutMs || DEFAULTS.xfeatInferenceTimeoutMs),
     lighterGlueInferenceTimeoutMs: Number(state.options.lighterGlueInferenceTimeoutMs || DEFAULTS.lighterGlueInferenceTimeoutMs),
     webnnInferenceTimeoutMs: Number(state.options.webnnInferenceTimeoutMs || DEFAULTS.webnnInferenceTimeoutMs),
+    activeProvider: state.activeProvider || null,
+    webgpuWasmNumThreads: state.options.webgpuWasmNumThreads ?? DEFAULTS.webgpuWasmNumThreads,
     wasm: state.wasmConfig,
     ortVersion: state.ort?.version || null,
   };
@@ -721,6 +732,7 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
   for (const key of [
     "providers",
     "wasmNumThreads",
+    "webgpuWasmNumThreads",
     "wasmAutoThreadMax",
     "wasmAutoThreadDivisor",
     "wasmProxy",
@@ -799,6 +811,7 @@ async function loadOrt(options) {
   if (state.ort?.InferenceSession) return state.ort;
   const providerOrder = Array.isArray(options.providers) ? options.providers : ["webgpu", "wasm"];
   const firstProvider = providerOrder[0] || "wasm";
+  state.activeProvider = firstProvider;
   loadOrtScript(firstProvider, options);
   const runtime = getOrtGlobal();
   if (!runtime?.InferenceSession) throw new Error("ONNX Runtime Web did not initialize.");
@@ -814,6 +827,7 @@ async function createSessions(providers) {
   state.webgpuDeviceLostReason = null;
   for (const provider of providers) {
     try {
+      state.activeProvider = provider;
       setInitStage(`sessions:${provider}:start`);
       if (provider === "webgpu") {
         state.webgpuPreflightDiagnostics = {
@@ -1262,7 +1276,11 @@ function configureOrtWasmPaths(runtime, options) {
   runtime.env.wasm.wasmPaths["ort-wasm-simd-threaded.wasm"] = wasmFile;
   runtime.env.wasm.wasmPaths["ort-wasm-simd-threaded.jsep.wasm"] = jsepFile;
   const crossOriginReady = Boolean(self.crossOriginIsolated && typeof SharedArrayBuffer !== "undefined");
-  const requestedThreads = options.wasmNumThreads ?? DEFAULTS.wasmNumThreads;
+  const activeProvider = options.activeProvider || state.activeProvider || "";
+  const providerThreadOverride = activeProvider === "webgpu"
+    ? (options.webgpuWasmNumThreads ?? DEFAULTS.webgpuWasmNumThreads)
+    : undefined;
+  const requestedThreads = providerThreadOverride ?? options.wasmNumThreads ?? DEFAULTS.wasmNumThreads;
   const hardwareConcurrency = Number(self.navigator?.hardwareConcurrency || 0);
   const autoThreadMax = Math.max(1, Number(options.wasmAutoThreadMax || DEFAULTS.wasmAutoThreadMax || 4));
   const autoThreadDivisor = Math.max(1, Number(options.wasmAutoThreadDivisor || DEFAULTS.wasmAutoThreadDivisor || 2));
@@ -1280,6 +1298,9 @@ function configureOrtWasmPaths(runtime, options) {
   runtime.env.wasm.proxy = Boolean(options.wasmProxy) && numThreads > 1;
   state.wasmConfig = {
     wasmPaths: options.ortWasmPaths,
+    activeProvider,
+    requestedThreads,
+    webgpuWasmNumThreads: options.webgpuWasmNumThreads ?? DEFAULTS.webgpuWasmNumThreads,
     crossOriginIsolated: Boolean(self.crossOriginIsolated),
     hasSharedArrayBuffer: typeof SharedArrayBuffer !== "undefined",
     hardwareConcurrency,

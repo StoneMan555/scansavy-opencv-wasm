@@ -1,5 +1,6 @@
 .build/
 .cache/
+.local-run/
 coverage/
 dist/
 node_modules/
@@ -12,3 +13,4 @@ npm-debug.log*
 *.br
 *.gz
 .venv*/
+__pycache__/

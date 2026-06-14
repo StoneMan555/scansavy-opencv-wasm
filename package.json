@@ -9,6 +9,7 @@
     "validate:config": "node scripts/validate-config.mjs",
     "manifest": "node scripts/make-build-manifest.mjs",
     "export:xfeat": "powershell -ExecutionPolicy Bypass -File scripts/export-xfeat-lighterglue-onnx.ps1",
+    "probe:combined-xfeat-lighterglue": "powershell -ExecutionPolicy Bypass -File scripts/probe-combined-xfeat-lighterglue-export.ps1",
     "assets:xfeat": "node scripts/sync-xfeat-lighterglue-assets.mjs",
     "assets:onnxruntime": "node scripts/sync-onnxruntime-web-assets.mjs",
     "stage:web": "node scripts/stage-web-runtime-assets.mjs",
