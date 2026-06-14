@@ -75,13 +75,13 @@ assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.paral
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.candidateLimit, 2);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuPreflightTimeoutMs, 8000);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuSessionCreateTimeoutMs, 45000);
-assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuUsePreflightDevice, true);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuUsePreflightDevice, false);
 assert.deepEqual(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-conservative"]?.providers, ["wasm"]);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-conservative"]?.wasmNumThreads, 1);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-fast"]?.candidateLimit, 1);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-quality"]?.candidateLimit, 2);
-assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-fast"]?.webgpuUsePreflightDevice, true);
-assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-quality"]?.webgpuUsePreflightDevice, true);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-fast"]?.webgpuUsePreflightDevice, false);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-quality"]?.webgpuUsePreflightDevice, false);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-fast"]?.fallbackXFeatUrl, "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx");
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-wasm"]?.maxQueryFeatures, 384);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-wasm"]?.maxKeyframeFeatures, 384);

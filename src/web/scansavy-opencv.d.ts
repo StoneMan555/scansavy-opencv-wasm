@@ -104,6 +104,7 @@ export interface ScanSavvyRuntimeInitOptions {
   webgpuAdapterFeatureLevels?: Array<"core" | "compatibility">;
   webgpuTryFallbackAdapter?: boolean;
   webgpuPreferredLayout?: "NCHW" | "NHWC";
+  graphOptimizationLevel?: "disabled" | "basic" | "extended" | "all";
   webgpuGraphCapture?: boolean;
   webgpuUsePreflightDevice?: boolean;
   webgpuProfiling?: boolean;

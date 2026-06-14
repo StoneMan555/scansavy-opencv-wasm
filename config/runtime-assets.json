@@ -50,8 +50,8 @@
         "burstFrameOrder": "center-first",
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
-        "webgpuGraphCapture": true,
-        "webgpuUsePreflightDevice": true
+        "webgpuGraphCapture": false,
+        "webgpuUsePreflightDevice": false
       },
       "phone-webnn-npu": {
         "description": "Physical Android Chrome NPU probe profile for S23+-class phones. Tries ONNX Runtime WebNN with deviceType=npu, then WebGPU, then 8-thread-cap WASM so the browser route can use native ML silicon when Chrome exposes it.",
@@ -99,8 +99,8 @@
         "fixedInputHeight": 640,
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
-        "webgpuGraphCapture": true,
-        "webgpuUsePreflightDevice": true
+        "webgpuGraphCapture": false,
+        "webgpuUsePreflightDevice": false
       },
       "phone-s23-plus-max": {
         "description": "Aggressive physical Samsung S23+ profile. Tries WebNN/NPU first, then WebGPU, then an 8-thread WASM ceiling with wider MapPack hydration, cache, and prefetch budgets for phone-side relocalization stress tests.",
@@ -148,8 +148,8 @@
         "fixedInputHeight": 640,
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
-        "webgpuGraphCapture": true,
-        "webgpuUsePreflightDevice": true
+        "webgpuGraphCapture": false,
+        "webgpuUsePreflightDevice": false
       },
       "phone-webgpu-fast": {
         "description": "Physical-phone speed profile for the Samsung S23+ baseline. Uses WebGPU, fixed-shape XFeat, 8-thread-cap ORT WASM fallback, candidateLimit=1, and v1 MapPack retrieval escalation when the top candidate is ambiguous.",
@@ -193,8 +193,8 @@
         "fixedInputHeight": 640,
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
-        "webgpuGraphCapture": true,
-        "webgpuUsePreflightDevice": true
+        "webgpuGraphCapture": false,
+        "webgpuUsePreflightDevice": false
       },
       "phone-webgpu-quality": {
         "description": "Physical-phone quality profile for the Samsung S23+ baseline. Uses WebGPU, fixed-shape XFeat, 8-thread-cap ORT WASM fallback, candidateLimit=2, and v1 retrieval/covisibility sidecars.",
@@ -238,8 +238,8 @@
         "fixedInputHeight": 640,
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
-        "webgpuGraphCapture": true,
-        "webgpuUsePreflightDevice": true
+        "webgpuGraphCapture": false,
+        "webgpuUsePreflightDevice": false
       },
       "phone-wasm": {
         "description": "Physical-phone fallback for S23+-class devices or browsers where WebGPU is disabled or unstable.",
@@ -332,8 +332,8 @@
         "fixedInputHeight": 640,
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
-        "webgpuGraphCapture": true,
-        "webgpuUsePreflightDevice": true
+        "webgpuGraphCapture": false,
+        "webgpuUsePreflightDevice": false
       },
       "emulator-webnn-gpu": {
         "description": "Android emulator WebNN acceleration probe. Requests ONNX Runtime WebNN with deviceType=gpu under Chrome WebNN flags, then falls back to WebGPU and the same S23+-shaped 8-thread-cap WASM lane.",
@@ -382,8 +382,8 @@
         "fixedInputHeight": 640,
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
-        "webgpuGraphCapture": true,
-        "webgpuUsePreflightDevice": true
+        "webgpuGraphCapture": false,
+        "webgpuUsePreflightDevice": false
       },
       "emulator-conservative": {
         "description": "Legacy Android emulator route QA fallback. Uses single-thread ORT WASM for debugging browser/emulator instability only; do not use as the default performance proxy for the S23+ phone.",

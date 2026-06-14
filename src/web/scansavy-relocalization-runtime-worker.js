@@ -3,6 +3,8 @@
 const RUNTIME_ADAPTER_DIAGNOSTICS_VERSION = "webgpu-adapter-sweep-v2";
 
 const DEFAULTS = {
+  assetBaseUrl: "",
+  runtimeAssetBaseUrl: "",
   manifestUrl: "/scansavy-relocalization-runtime/manifest.json",
   ortAllUrl: "/scansavy-relocalization-runtime/ort/ort.all.min.js",
   ortWebGpuUrl: "/scansavy-relocalization-runtime/ort/ort.webgpu.min.js",
@@ -67,6 +69,9 @@ const DEFAULTS = {
   webgpuSessionCreateTimeoutMs: 45000,
   webnnSessionCreateTimeoutMs: 60000,
   wasmSessionCreateTimeoutMs: 90000,
+  xfeatInferenceTimeoutMs: 30000,
+  lighterGlueInferenceTimeoutMs: 30000,
+  webnnInferenceTimeoutMs: 8000,
   webgpuPowerPreference: "high-performance",
   webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
   webgpuAdapterFeatureLevels: ["core", "compatibility"],
@@ -75,8 +80,9 @@ const DEFAULTS = {
   webnnPowerPreference: "high-performance",
   webnnUseWebGpuDevice: false,
   webgpuPreferredLayout: "NCHW",
+  graphOptimizationLevel: "auto",
   webgpuGraphCapture: false,
-  webgpuUsePreflightDevice: true,
+  webgpuUsePreflightDevice: false,
   webgpuForceFallbackAdapter: false,
   webgpuProfiling: false,
   lazyMapPack: true,
@@ -112,7 +118,7 @@ const RUNTIME_PROFILES = {
     maxKeyframeFeatures: 384,
     candidateLimit: 2,
     webgpuPreferredLayout: "NCHW",
-    webgpuGraphCapture: true,
+    webgpuGraphCapture: false,
   },
   "phone-webnn-npu": {
     providers: ["webnn", "webgpu", "wasm"],
@@ -154,7 +160,7 @@ const RUNTIME_PROFILES = {
     maxLighterGluePairsPerBurst: 2,
     adaptiveCandidateEscalation: true,
     webgpuPreferredLayout: "NCHW",
-    webgpuGraphCapture: true,
+    webgpuGraphCapture: false,
   },
   "phone-s23-plus-max": {
     providers: ["webnn", "webgpu", "wasm"],
@@ -200,8 +206,8 @@ const RUNTIME_PROFILES = {
     burstFrameOrder: "center-first",
     webgpuPowerPreference: "high-performance",
     webgpuPreferredLayout: "NCHW",
-    webgpuGraphCapture: true,
-    webgpuUsePreflightDevice: true,
+    webgpuGraphCapture: false,
+    webgpuUsePreflightDevice: false,
   },
   "phone-webgpu-fast": {
     providers: ["webgpu", "wasm"],
@@ -239,7 +245,7 @@ const RUNTIME_PROFILES = {
     maxLighterGluePairsPerBurst: 2,
     adaptiveCandidateEscalation: true,
     webgpuPreferredLayout: "NCHW",
-    webgpuGraphCapture: true,
+    webgpuGraphCapture: false,
   },
   "phone-webgpu-quality": {
     providers: ["webgpu", "wasm"],
@@ -277,7 +283,7 @@ const RUNTIME_PROFILES = {
     maxLighterGluePairsPerBurst: 2,
     adaptiveCandidateEscalation: true,
     webgpuPreferredLayout: "NCHW",
-    webgpuGraphCapture: true,
+    webgpuGraphCapture: false,
   },
   "phone-wasm": {
     providers: ["wasm"],
@@ -353,7 +359,7 @@ const RUNTIME_PROFILES = {
     maxLighterGluePairsPerBurst: 4,
     adaptiveCandidateEscalation: true,
     webgpuPreferredLayout: "NCHW",
-    webgpuGraphCapture: true,
+    webgpuGraphCapture: false,
   },
   "emulator-webnn-gpu": {
     providers: ["webnn", "webgpu", "wasm"],
@@ -396,7 +402,7 @@ const RUNTIME_PROFILES = {
     maxLighterGluePairsPerBurst: 1,
     adaptiveCandidateEscalation: true,
     webgpuPreferredLayout: "NCHW",
-    webgpuGraphCapture: true,
+    webgpuGraphCapture: false,
   },
   "emulator-conservative": {
     providers: ["wasm"],
@@ -454,6 +460,11 @@ const state = {
   assetBufferCacheBytes: 0,
   preprocessCanvas: null,
   preprocessSourceCanvas: null,
+  initStage: "idle",
+  initStartedAt: 0,
+  initStageUpdatedAt: 0,
+  initTimings: [],
+  initError: null,
 };
 
 self.onmessage = async (event) => {
@@ -490,6 +501,10 @@ self.onmessage = async (event) => {
     }
     reply(id, type || "unknown", { status: "failed", error: `Unknown message type: ${type}` });
   } catch (error) {
+    if (type === "init") {
+      state.initError = String(error?.message || error);
+      setInitStage("failed", { error: state.initError });
+    }
     reply(id, type || "unknown", {
       status: "failed",
       error: String(error?.message || error),
@@ -504,6 +519,33 @@ function reply(id, type, payload) {
   self.postMessage({ id, type, payload });
 }
 
+function postProgress(payload) {
+  try {
+    self.postMessage({ type: "progress", payload });
+  } catch {
+    // Diagnostics only; never block runtime work on progress delivery.
+  }
+}
+
+function flushProgress() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+function setInitStage(stage, detail = {}) {
+  const now = performance.now();
+  if (!state.initStartedAt) state.initStartedAt = now;
+  const entry = {
+    stage,
+    elapsedMs: roundMs(now - state.initStartedAt),
+    ...detail,
+  };
+  state.initStage = stage;
+  state.initStageUpdatedAt = now;
+  state.initTimings.push(entry);
+  postProgress({ kind: "init", ...entry });
+  return entry;
+}
+
 function runtimeWorkerBuildInfo() {
   return {
     status: "ready",
@@ -514,6 +556,9 @@ function runtimeWorkerBuildInfo() {
     hasWebGpu: Boolean(self.navigator?.gpu),
     hasWebNn: Boolean(self.navigator?.ml),
     hardwareConcurrency: Number(self.navigator?.hardwareConcurrency || 0),
+    initStage: state.initStage,
+    initTimings: state.initTimings,
+    initError: state.initError,
     runtimeProfile: state.options.runtimeProfile || state.options.profile || null,
     provider: state.provider || null,
     diagnostics: runtimeDiagnostics(),
@@ -531,6 +576,10 @@ function runtimeDiagnostics() {
     hasWebGpu: Boolean(self.navigator?.gpu),
     hasWebNn: Boolean(self.navigator?.ml),
     hardwareConcurrency: Number(self.navigator?.hardwareConcurrency || 0),
+    initStage: state.initStage,
+    initElapsedMs: state.initStartedAt ? roundMs(performance.now() - state.initStartedAt) : 0,
+    initTimings: state.initTimings,
+    initError: state.initError,
     maxModelSide: Number(state.options.maxModelSide || DEFAULTS.maxModelSide),
     xfeatUrl: state.options.xfeatUrl || DEFAULTS.xfeatUrl,
     fixedInputWidth: Number(state.options.fixedInputWidth || 0),
@@ -588,6 +637,9 @@ function runtimeDiagnostics() {
     webgpuSessionCreateTimeoutMs: Number(state.options.webgpuSessionCreateTimeoutMs || DEFAULTS.webgpuSessionCreateTimeoutMs),
     webnnSessionCreateTimeoutMs: Number(state.options.webnnSessionCreateTimeoutMs || DEFAULTS.webnnSessionCreateTimeoutMs),
     wasmSessionCreateTimeoutMs: Number(state.options.wasmSessionCreateTimeoutMs || DEFAULTS.wasmSessionCreateTimeoutMs),
+    xfeatInferenceTimeoutMs: Number(state.options.xfeatInferenceTimeoutMs || DEFAULTS.xfeatInferenceTimeoutMs),
+    lighterGlueInferenceTimeoutMs: Number(state.options.lighterGlueInferenceTimeoutMs || DEFAULTS.lighterGlueInferenceTimeoutMs),
+    webnnInferenceTimeoutMs: Number(state.options.webnnInferenceTimeoutMs || DEFAULTS.webnnInferenceTimeoutMs),
     wasm: state.wasmConfig,
     ortVersion: state.ort?.version || null,
   };
@@ -595,9 +647,17 @@ function runtimeDiagnostics() {
 
 async function initRuntime(payload) {
   const started = performance.now();
+  state.initStartedAt = started;
+  state.initStageUpdatedAt = started;
+  state.initTimings = [];
+  state.initError = null;
+  setInitStage("start");
   const requestedOptions = payload.options || payload;
   const profileName = requestedOptions.runtimeProfile || requestedOptions.profile || DEFAULTS.runtimeProfile || "phone-webgpu";
+  state.options = { ...DEFAULTS, ...requestedOptions, runtimeProfile: profileName };
+  setInitStage("manifest:start", { profileName });
   state.manifest = await maybeFetchJson(requestedOptions.manifestUrl || DEFAULTS.manifestUrl);
+  setInitStage("manifest:ready", { hasManifest: Boolean(state.manifest) });
   const manifestProfiles = state.manifest?.runtimeProfiles || state.manifest?.onnxRuntime?.runtimeProfiles || {};
   const profileOptions =
     manifestProfiles[profileName] ||
@@ -620,8 +680,11 @@ async function initRuntime(payload) {
   state.warmupSummary = null;
   applyProfileDefaults(profileOptions, profileOverrideKeys);
   applyModelShapeDefaults(state.options);
+  setInitStage("ort:start", {
+    providers: Array.isArray(state.options.providers) ? state.options.providers.join(",") : String(state.options.providers || ""),
+  });
   state.ort = await loadOrt(state.options);
-  state.opencv = await loadOpenCv(state.options.opencvJsUrl, state.options.fallbackOpenCvJsUrl);
+  setInitStage("ort:ready", { ortVersion: state.ort?.version || null });
 
   const providers =
     Array.isArray(profileOptions?.providers) && profileOptions.providers.length && !profileOverrideKeys.includes("providers")
@@ -630,7 +693,15 @@ async function initRuntime(payload) {
         ? state.options.providers
         : DEFAULTS.providers;
   state.options.providers = providers;
+  setInitStage("sessions:start", { providers: providers.join(",") });
   const sessionResult = await createSessions(providers);
+  setInitStage("sessions:ready", { provider: state.provider || null });
+  setInitStage("opencv:start", { opencvJsUrl: state.options.opencvJsUrl || DEFAULTS.opencvJsUrl });
+  state.opencv = await loadOpenCv(state.options.opencvJsUrl, state.options.fallbackOpenCvJsUrl);
+  setInitStage("opencv:ready", {
+    hasGeometry: Boolean(state.opencv?.solvePnPRansac && state.opencv?.projectPoints),
+  });
+  setInitStage("ready", { provider: state.provider || null });
 
   return {
     status: "ready",
@@ -689,6 +760,7 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
     "webnnPowerPreference",
     "webnnUseWebGpuDevice",
     "webgpuPreferredLayout",
+    "graphOptimizationLevel",
     "webgpuGraphCapture",
     "webgpuUsePreflightDevice",
     "webnnPreflightTimeoutMs",
@@ -742,6 +814,7 @@ async function createSessions(providers) {
   state.webgpuDeviceLostReason = null;
   for (const provider of providers) {
     try {
+      setInitStage(`sessions:${provider}:start`);
       if (provider === "webgpu") {
         state.webgpuPreflightDiagnostics = {
           status: "pending",
@@ -779,17 +852,30 @@ async function createSessions(providers) {
       const sessionStarted = performance.now();
       const sessionOptions = sessionOptionsFor(provider, state.options);
       const sessionTimeoutMs = sessionTimeoutForProvider(provider, state.options);
+      setInitStage(`sessions:${provider}:xfeat:start`, {
+        timeoutMs: sessionTimeoutMs,
+        xfeatUrl: state.options.xfeatUrl || DEFAULTS.xfeatUrl,
+      });
       const xfeatSessionResult = await withTimeout(
         createXFeatSession(sessionOptions),
         sessionTimeoutMs,
         `${provider} XFeat session creation`,
       );
+      setInitStage(`sessions:${provider}:xfeat:ready`, {
+        fallbackUsed: Boolean(xfeatSessionResult.fallbackUsed),
+      });
       state.xfeatSession = xfeatSessionResult.session;
-      state.lighterGlueSession = await withTimeout(
-        state.ort.InferenceSession.create(state.options.lighterGlueUrl, sessionOptions),
+      const lighterGlueUrl = resolveUrl(state.options.lighterGlueUrl || DEFAULTS.lighterGlueUrl);
+      setInitStage(`sessions:${provider}:lighterglue:start`, {
+        lighterGlueUrl,
+      });
+      const lighterGlueSessionResult = await withTimeout(
+        createOrtSessionFromUrl(lighterGlueUrl, sessionOptions, "LighterGlue model"),
         sessionTimeoutMs,
         `${provider} LighterGlue session creation`,
       );
+      state.lighterGlueSession = lighterGlueSessionResult.session;
+      setInitStage(`sessions:${provider}:lighterglue:ready`);
       state.provider = provider;
       attempts.push({
         provider,
@@ -803,6 +889,7 @@ async function createSessions(providers) {
     } catch (error) {
       if (provider === "webgpu") disposeWebGpuDevice();
       const errorText = String(error?.message || error);
+      setInitStage(`sessions:${provider}:failed`, { error: errorText });
       attempts.push({
         provider,
         status: "failed",
@@ -827,6 +914,12 @@ function sessionTimeoutForProvider(provider, options) {
   return Number(options.wasmSessionCreateTimeoutMs || DEFAULTS.wasmSessionCreateTimeoutMs);
 }
 
+function inferenceTimeoutMs(model, options) {
+  if (state.provider === "webnn") return Number(options.webnnInferenceTimeoutMs || DEFAULTS.webnnInferenceTimeoutMs);
+  if (model === "lighterglue") return Number(options.lighterGlueInferenceTimeoutMs || DEFAULTS.lighterGlueInferenceTimeoutMs);
+  return Number(options.xfeatInferenceTimeoutMs || DEFAULTS.xfeatInferenceTimeoutMs);
+}
+
 function withTimeout(promise, timeoutMs, label) {
   const ms = Math.max(0, Number(timeoutMs || 0));
   if (!ms) return promise;
@@ -842,25 +935,36 @@ function withTimeout(promise, timeoutMs, label) {
 }
 
 async function createXFeatSession(sessionOptions) {
-  const primaryUrl = state.options.xfeatUrl || DEFAULTS.xfeatUrl;
-  const fallbackUrl = state.options.fallbackXFeatUrl || DEFAULTS.xfeatUrl;
+  const primaryUrl = resolveUrl(state.options.xfeatUrl || DEFAULTS.xfeatUrl);
+  const fallbackUrl = resolveUrl(state.options.fallbackXFeatUrl || DEFAULTS.xfeatUrl);
   try {
+    const result = await createOrtSessionFromUrl(primaryUrl, sessionOptions, "XFeat model");
     return {
-      session: await state.ort.InferenceSession.create(primaryUrl, sessionOptions),
-      url: primaryUrl,
+      ...result,
       fallbackUsed: false,
     };
   } catch (primaryError) {
     if (!fallbackUrl || fallbackUrl === primaryUrl) throw primaryError;
     const fallbackSessionOptions = { ...sessionOptions };
     delete fallbackSessionOptions.enableGraphCapture;
+    const fallbackResult = await createOrtSessionFromUrl(fallbackUrl, fallbackSessionOptions, "XFeat fallback model");
     return {
-      session: await state.ort.InferenceSession.create(fallbackUrl, fallbackSessionOptions),
-      url: fallbackUrl,
+      ...fallbackResult,
       fallbackUsed: true,
       primaryError: String(primaryError?.message || primaryError),
     };
   }
+}
+
+async function createOrtSessionFromUrl(url, sessionOptions, label) {
+  const resolvedUrl = resolveUrl(url);
+  const buffer = await fetchArrayBufferCached(resolvedUrl, label || resolvedUrl);
+  const modelBytes = new Uint8Array(buffer.slice(0));
+  return {
+    session: await state.ort.InferenceSession.create(modelBytes, sessionOptions),
+    url: resolvedUrl,
+    bytes: modelBytes.byteLength,
+  };
 }
 
 async function preflightWebGpu(options) {
@@ -1120,11 +1224,12 @@ function safeJsonStringify(value) {
 }
 
 function loadOrtScript(provider, options) {
-  const scriptUrl = provider === "webnn"
+  const configuredScriptUrl = provider === "webnn"
     ? options.ortAllUrl
     : provider === "webgpu"
       ? options.ortWebGpuUrl
       : options.ortWasmUrl;
+  const scriptUrl = resolveUrl(configuredScriptUrl);
   if (state.ortScriptsLoaded.has(scriptUrl)) return;
   importScripts(scriptUrl);
   state.ortScriptsLoaded.add(scriptUrl);
@@ -1201,9 +1306,16 @@ function configureOrtWebGpu(runtime, options) {
 
 function sessionOptionsFor(provider, options) {
   const executionProvider = executionProviderFor(provider, options);
+  const requestedGraphOptimizationLevel = String(options.graphOptimizationLevel || "auto").toLowerCase();
+  const graphOptimizationLevel =
+    requestedGraphOptimizationLevel && requestedGraphOptimizationLevel !== "auto"
+      ? requestedGraphOptimizationLevel
+      : provider === "webgpu" || provider === "webnn"
+        ? "disabled"
+        : "all";
   const sessionOptions = {
     executionProviders: [executionProvider],
-    graphOptimizationLevel: "all",
+    graphOptimizationLevel,
     executionMode: "sequential",
     enableCpuMemArena: true,
     enableMemPattern: provider !== "webgpu",
@@ -1239,10 +1351,16 @@ function executionProviderFor(provider, options) {
 
 async function loadOpenCv(primaryUrl, fallbackUrl) {
   if (state.opencv?.Mat) return state.opencv;
+  if (self.cv?.Mat) return self.cv;
+  if (self.cv?.then) return await self.cv;
   try {
     return await loadOpenCvUrl(primaryUrl);
   } catch (primaryError) {
+    if (self.cv?.Mat) return self.cv;
+    if (self.cv?.then) return await self.cv;
     if (!fallbackUrl || fallbackUrl === primaryUrl) throw primaryError;
+    self.cv = undefined;
+    self.Module = undefined;
     return await loadOpenCvUrl(fallbackUrl);
   }
 }
@@ -1252,9 +1370,7 @@ async function loadOpenCvUrl(url) {
   const wasmUrl = scriptUrl.includes("scansavy-opencv-geometry.js")
     ? new URL("scansavy-opencv-geometry.wasm", scriptUrl).href
     : new URL("scansavy-opencv.wasm", scriptUrl).href;
-  const previousModule = self.Module && typeof self.Module === "object" ? self.Module : {};
   self.Module = {
-    ...previousModule,
     locateFile(path, prefix) {
       if (path === "opencv_js.wasm" || path.endsWith(".wasm")) return wasmUrl;
       return new URL(path, prefix || scriptUrl).href;
@@ -1489,6 +1605,15 @@ async function localizeBurst(payload) {
   const started = performance.now();
   const frames = payload.frames || [];
   const options = { ...state.options, ...(payload.options || {}) };
+  postProgress({
+    kind: "localize",
+    stage: "start",
+    provider: state.provider,
+    frameCount: frames.length,
+    candidateLimit: Number(options.candidateLimit || DEFAULTS.candidateLimit),
+    maxLighterGluePairsPerBurst: Number(options.maxLighterGluePairsPerBurst || DEFAULTS.maxLighterGluePairsPerBurst),
+  });
+  await flushProgress();
   const frameResults = [];
   const previousAcceptedKeyframeId = state.lastAcceptedKeyframeId;
   const matcherBudget = {
@@ -1532,7 +1657,7 @@ async function localizeBurst(payload) {
     scheduleKeyframePrefetch(best.keyframeId);
   }
 
-  return {
+  const response = {
     status: accepted ? "ready" : "rejected",
     isWarmup: Boolean(options.warmup),
     descriptorMode: state.sidecar?.descriptorMode || "xfeat-lg-v0",
@@ -1559,6 +1684,17 @@ async function localizeBurst(payload) {
     elapsedMs: roundMs(performance.now() - started),
     reason: accepted ? "accepted" : rejectionReason(best, options),
   };
+  postProgress({
+    kind: "localize",
+    stage: "done",
+    provider: state.provider,
+    status: response.status,
+    elapsedMs: response.elapsedMs,
+    confidence: response.confidence,
+    inlierCount: response.inlierCount,
+    matchCount: response.matchCount,
+  });
+  return response;
 }
 
 function shouldUseParallelBurstExtraction(frames, options) {
@@ -1944,12 +2080,26 @@ function hydrationConcurrencyForProvider(provider, options) {
 
 async function runXFeat(imageData, options) {
   const started = performance.now();
+  const frameIndex = imageData.frameIndex ?? imageData.runtimeIndex ?? null;
+  postProgress({
+    kind: "model-run",
+    stage: "xfeat:start",
+    provider: state.provider,
+    frameIndex,
+    width: imageData.width,
+    height: imageData.height,
+  });
+  await flushProgress();
   const prep = preprocessImage(imageData, options);
   const preprocessElapsedMs = roundMs(performance.now() - started);
   const input = new state.ort.Tensor("float32", prep.tensor, [1, 3, prep.height, prep.width]);
   const inputName = state.xfeatSession.inputNames?.[0] || "images";
   const inferenceStarted = performance.now();
-  const output = await state.xfeatSession.run({ [inputName]: input });
+  const output = await withTimeout(
+    state.xfeatSession.run({ [inputName]: input }),
+    inferenceTimeoutMs("xfeat", options),
+    `XFeat ${state.provider || "unknown"} inference`,
+  );
   const inferenceElapsedMs = roundMs(performance.now() - inferenceStarted);
   const keypointsRaw = outputTensor(output, ["keypoints", "kpts", "mkpts"], 0);
   const descriptorsRaw = outputTensor(output, ["descriptors", "desc", "descs"], 1);
@@ -1968,7 +2118,7 @@ async function runXFeat(imageData, options) {
     Number(options.maxQueryFeatures || options.topK || DEFAULTS.maxQueryFeatures),
   );
   const glueKeypoints = normalizeKptsForGlue(selected.keypoints, imageData.width, imageData.height);
-  return {
+  const response = {
     keypoints: selected.keypoints,
     descriptors: selected.descriptors,
     scores: selected.scores,
@@ -1986,17 +2136,40 @@ async function runXFeat(imageData, options) {
     inferenceElapsedMs,
     elapsedMs: roundMs(performance.now() - started),
   };
+  postProgress({
+    kind: "model-run",
+    stage: "xfeat:done",
+    provider: state.provider,
+    frameIndex,
+    detectedKeypoints: response.count,
+    inferenceElapsedMs: response.inferenceElapsedMs,
+    elapsedMs: response.elapsedMs,
+  });
+  return response;
 }
 
 async function runLighterGlue(query, keyframe, options) {
   const started = performance.now();
+  postProgress({
+    kind: "model-run",
+    stage: "lighterglue:start",
+    provider: state.provider,
+    keyframeId: keyframe?.id || null,
+    queryFeatures: query.count,
+    keyframeFeatures: keyframe.count,
+  });
+  await flushProgress();
   const feeds = {
     kpts0: query.keypointTensor || new state.ort.Tensor("float32", normalizeKptsForGlue(query.keypoints, query.width, query.height), [1, query.count, 2]),
     kpts1: keyframe.keypointTensor || new state.ort.Tensor("float32", keyframe.normalizedKeypoints || normalizeKptsForGlue(keyframe.keypoints, keyframe.width || query.width, keyframe.height || query.height), [1, keyframe.count, 2]),
     desc0: query.descriptorTensor || new state.ort.Tensor("float32", query.descriptors, [1, query.count, 64]),
     desc1: keyframe.descriptorTensor || new state.ort.Tensor("float32", keyframe.descriptors, [1, keyframe.count, 64]),
   };
-  const output = await state.lighterGlueSession.run(feeds);
+  const output = await withTimeout(
+    state.lighterGlueSession.run(feeds),
+    inferenceTimeoutMs("lighterglue", options),
+    `LighterGlue ${state.provider || "unknown"} inference`,
+  );
   const matchesRaw = outputTensor(output, ["matches", "matches0", "indices"], 0);
   const scoresRaw = outputTensor(output, ["scores", "mscores", "matching_scores"], 1, false);
   const matches = [];
@@ -2009,7 +2182,16 @@ async function runLighterGlue(query, keyframe, options) {
     if (queryIndex < 0 || mapIndex < 0 || queryIndex >= query.count || mapIndex >= keyframe.count) continue;
     matches.push({ queryIndex, mapIndex, score });
   }
-  return { keyframe, query, matches, elapsedMs: roundMs(performance.now() - started) };
+  const response = { keyframe, query, matches, elapsedMs: roundMs(performance.now() - started) };
+  postProgress({
+    kind: "model-run",
+    stage: "lighterglue:done",
+    provider: state.provider,
+    keyframeId: keyframe?.id || null,
+    matchCount: matches.length,
+    elapsedMs: response.elapsedMs,
+  });
+  return response;
 }
 
 function solvePnpForMatches(matched, keyframe, query, frameIndex, options) {
@@ -2668,7 +2850,8 @@ async function fetchJsonArray(path, baseUrl, optional = false) {
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url, { cache: "force-cache" });
+  const resolvedUrl = resolveUrl(url);
+  const response = await fetch(resolvedUrl, { cache: "force-cache" });
   if (!response.ok) throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
   return await response.json();
 }
@@ -2722,11 +2905,29 @@ function trimAssetBufferCache() {
   }
 }
 
+function runtimeAssetOrigin() {
+  const explicit =
+    state.options?.assetBaseUrl ||
+    state.options?.runtimeAssetBaseUrl ||
+    DEFAULTS.assetBaseUrl ||
+    DEFAULTS.runtimeAssetBaseUrl ||
+    "";
+  if (/^https?:\/\//i.test(explicit)) return explicit.replace(/\/+$/, "");
+  const locationOrigin = self.location?.origin || "";
+  if (locationOrigin && locationOrigin !== "null") return locationOrigin;
+  return "";
+}
+
 function resolveUrl(path, baseUrl = self.location.href) {
-  if (!path) return self.location.href;
+  if (!path) return runtimeAssetOrigin() || self.location.href;
+  if (/^(https?:|blob:|data:)/i.test(path)) return path;
+  const origin = runtimeAssetOrigin();
+  if (String(path).startsWith("/") && origin) return new URL(path, origin).href;
   const absoluteBaseUrl = /^https?:\/\//i.test(baseUrl)
     ? baseUrl
-    : new URL(baseUrl, self.location.origin || self.location.href).href;
+    : origin
+      ? new URL(baseUrl || "/", origin).href
+      : new URL(baseUrl, self.location.href).href;
   return new URL(path, absoluteBaseUrl).href;
 }
 
