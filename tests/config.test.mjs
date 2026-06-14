@@ -52,6 +52,7 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].webnnDeviceType, "gpu");
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].providers, ["webnn", "webgpu", "wasm"]);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].wasmNumThreads, 8);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].webgpuWasmNumThreads, 8);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].candidateHydrationConcurrency, 8);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].parallelBurstExtraction, false);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].burstFrameExtractionConcurrency, 4);
@@ -60,9 +61,12 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].fixedInputWidth, 640);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].fixedInputHeight, 640);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].wasmNumThreads, 8);
+  assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].webgpuWasmNumThreads, 8);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].parallelBurstExtraction, false);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-safe"].webgpuUsePreflightDevice, false);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-webgpu-fast"].webgpuUsePreflightDevice, false);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-webgpu-fast"].webgpuWasmNumThreads, 8);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-webgpu-quality"].webgpuWasmNumThreads, 8);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].webnnUseWebGpuDevice, true);
 });
 

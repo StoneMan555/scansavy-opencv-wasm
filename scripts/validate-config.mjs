@@ -56,7 +56,7 @@ assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webnn-npu"]?.web
 assert.deepEqual(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.providers, ["webnn", "webgpu", "wasm"]);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.webnnDeviceType, "npu");
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.wasmNumThreads, 8);
-assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.webgpuWasmNumThreads, 1);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.webgpuWasmNumThreads, 8);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.candidateHydrationConcurrency, 8);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.parallelBurstExtraction, false);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.burstFrameExtractionConcurrency, 4);
@@ -68,7 +68,7 @@ assert.deepEqual(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-wasm-safe"]?
 assert.deepEqual(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.providers, ["webgpu", "wasm"]);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.deviceBaseline, "samsung-s23-plus");
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.wasmNumThreads, 8);
-assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuWasmNumThreads, 1);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuWasmNumThreads, 8);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuBurstFrameConcurrency, 4);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuCandidateHydrationConcurrency, 8);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.candidateHydrationConcurrency, 8);
@@ -84,8 +84,8 @@ assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-fast"]?.c
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-quality"]?.candidateLimit, 2);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-fast"]?.webgpuUsePreflightDevice, false);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-quality"]?.webgpuUsePreflightDevice, false);
-assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-fast"]?.webgpuWasmNumThreads, 1);
-assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-quality"]?.webgpuWasmNumThreads, 1);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-fast"]?.webgpuWasmNumThreads, 8);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-quality"]?.webgpuWasmNumThreads, 8);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu-fast"]?.fallbackXFeatUrl, "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx");
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-wasm"]?.maxQueryFeatures, 384);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-wasm"]?.maxKeyframeFeatures, 384);

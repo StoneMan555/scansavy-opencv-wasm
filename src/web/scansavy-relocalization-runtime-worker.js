@@ -50,7 +50,7 @@ const DEFAULTS = {
   warmupCandidateLimit: 1,
   warmupMaxLighterGluePairs: 1,
   wasmNumThreads: "auto",
-  webgpuWasmNumThreads: 1,
+  webgpuWasmNumThreads: 8,
   wasmAutoThreadMax: 8,
   wasmAutoThreadDivisor: 2,
   wasmProxy: false,
@@ -94,7 +94,7 @@ const RUNTIME_PROFILES = {
   "phone-webgpu": {
     providers: ["webgpu", "wasm"],
     wasmNumThreads: 8,
-    webgpuWasmNumThreads: 1,
+    webgpuWasmNumThreads: 8,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -125,7 +125,7 @@ const RUNTIME_PROFILES = {
   "phone-webnn-npu": {
     providers: ["webnn", "webgpu", "wasm"],
     wasmNumThreads: 8,
-    webgpuWasmNumThreads: 1,
+    webgpuWasmNumThreads: 8,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -168,7 +168,7 @@ const RUNTIME_PROFILES = {
   "phone-s23-plus-max": {
     providers: ["webnn", "webgpu", "wasm"],
     wasmNumThreads: 8,
-    webgpuWasmNumThreads: 1,
+    webgpuWasmNumThreads: 8,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 1,
     wasmProxy: false,
@@ -216,7 +216,7 @@ const RUNTIME_PROFILES = {
   "phone-webgpu-fast": {
     providers: ["webgpu", "wasm"],
     wasmNumThreads: 8,
-    webgpuWasmNumThreads: 1,
+    webgpuWasmNumThreads: 8,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -255,7 +255,7 @@ const RUNTIME_PROFILES = {
   "phone-webgpu-quality": {
     providers: ["webgpu", "wasm"],
     wasmNumThreads: 8,
-    webgpuWasmNumThreads: 1,
+    webgpuWasmNumThreads: 8,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -332,7 +332,7 @@ const RUNTIME_PROFILES = {
   "emulator-safe": {
     providers: ["webgpu", "wasm"],
     wasmNumThreads: 8,
-    webgpuWasmNumThreads: 1,
+    webgpuWasmNumThreads: 8,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
@@ -371,7 +371,7 @@ const RUNTIME_PROFILES = {
   "emulator-webnn-gpu": {
     providers: ["webnn", "webgpu", "wasm"],
     wasmNumThreads: 8,
-    webgpuWasmNumThreads: 1,
+    webgpuWasmNumThreads: 8,
     wasmAutoThreadMax: 8,
     wasmAutoThreadDivisor: 2,
     wasmProxy: false,
