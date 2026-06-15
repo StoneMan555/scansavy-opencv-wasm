@@ -67,6 +67,9 @@ const DEFAULTS = {
   maxAssetBufferCacheEntries: 256,
   maxAssetBufferCacheBytes: 192 * 1024 * 1024,
   prefetchNeighborKeyframes: 5,
+  keyframeTensorCacheMaxEntries: 128,
+  precacheKeyframeTensorConcurrency: 8,
+  precacheNeighborKeyframeTensors: false,
   webgpuPreflight: true,
   webnnPreflight: true,
   webgpuPreflightTimeoutMs: 8000,
@@ -474,6 +477,17 @@ const state = {
   assetBufferCache: new Map(),
   assetBufferCacheBytes: 0,
   keyframeImageDataCache: new Map(),
+  keyframeTensorCache: new Map(),
+  keyframeTensorOrder: [],
+  keyframeTensorStats: {
+    hits: 0,
+    misses: 0,
+    created: 0,
+    evicted: 0,
+    precacheRequests: 0,
+    precacheKeyframes: 0,
+    lastPrecacheElapsedMs: 0,
+  },
   preprocessCanvas: null,
   preprocessSourceCanvas: null,
   initStage: "idle",
@@ -503,6 +517,11 @@ self.onmessage = async (event) => {
     }
     if (type === "warmup") {
       const result = await warmupRuntime(payload || {});
+      reply(id, type, result);
+      return;
+    }
+    if (type === "precacheKeyframeTensors") {
+      const result = await precacheKeyframeTensors(payload || {});
       reply(id, type, result);
       return;
     }
@@ -631,6 +650,9 @@ function runtimeDiagnostics() {
     maxHydratedKeyframes: Number(state.options.maxHydratedKeyframes || DEFAULTS.maxHydratedKeyframes),
     hydratedAssetCacheEntries: state.assetBufferCache.size,
     hydratedAssetCacheBytes: state.assetBufferCacheBytes,
+    keyframeTensorCacheEntries: state.keyframeTensorCache.size,
+    keyframeTensorCacheMaxEntries: Number(state.options.keyframeTensorCacheMaxEntries || DEFAULTS.keyframeTensorCacheMaxEntries),
+    keyframeTensorCacheStats: keyframeTensorCacheStats(),
     prefetchNeighborKeyframes: Number(state.options.prefetchNeighborKeyframes || DEFAULTS.prefetchNeighborKeyframes),
     webgpuPowerPreference: state.options.webgpuPowerPreference || DEFAULTS.webgpuPowerPreference,
     webgpuAdapterPowerPreferences: normalizeList(
@@ -1509,6 +1531,17 @@ async function loadMapPack(payload) {
 
   state.hydratedKeyframes = new Map();
   state.hydratedOrder = [];
+  state.keyframeTensorCache = new Map();
+  state.keyframeTensorOrder = [];
+  state.keyframeTensorStats = {
+    hits: 0,
+    misses: 0,
+    created: 0,
+    evicted: 0,
+    precacheRequests: 0,
+    precacheKeyframes: 0,
+    lastPrecacheElapsedMs: 0,
+  };
   state.covisibilityByKeyframe = covisibilityMap(sidecar);
   state.sidecarBaseUrl = sidecarBaseUrl;
   const keyframes = [];
@@ -1590,9 +1623,142 @@ async function ensureHydratedKeyframe(keyframe) {
   const maxHydrated = Math.max(1, Number(state.options.maxHydratedKeyframes || DEFAULTS.maxHydratedKeyframes));
   while (state.hydratedOrder.length > maxHydrated) {
     const evictId = state.hydratedOrder.shift();
-    if (evictId && evictId !== state.lastAcceptedKeyframeId) state.hydratedKeyframes.delete(evictId);
+    if (evictId && evictId !== state.lastAcceptedKeyframeId) {
+      state.hydratedKeyframes.delete(evictId);
+      evictTensorCacheForKeyframe(evictId);
+    }
   }
   return hydrated;
+}
+
+async function precacheKeyframeTensors(payload = {}) {
+  requireReady();
+  const started = performance.now();
+  const options = { ...state.options, ...(payload.options || {}) };
+  const explicitIds = uniqueStrings([
+    ...(Array.isArray(payload.keyframeIds) ? payload.keyframeIds : []),
+    ...(Array.isArray(payload.candidateKeyframeIds) ? payload.candidateKeyframeIds : []),
+  ]);
+  const includeNeighbors = Boolean(payload.includeNeighbors ?? options.precacheNeighborKeyframeTensors);
+  const selectedIds = uniqueStrings([
+    ...explicitIds,
+    ...(includeNeighbors ? explicitIds.flatMap((id) => neighborKeyframeIds(id)) : []),
+  ]);
+  const selected = selectedIds
+    .map((id) => state.keyframes.find((candidate) => String(candidate.id) === String(id)))
+    .filter(Boolean);
+  const before = keyframeTensorCacheStats();
+  const concurrency = Math.max(1, Number(options.precacheKeyframeTensorConcurrency || DEFAULTS.precacheKeyframeTensorConcurrency));
+  const rows = await mapWithConcurrency(selected, Math.min(concurrency, Math.max(1, selected.length)), async (keyframe) => {
+    const hydrated = await ensureHydratedKeyframe(keyframe);
+    const bundle = ensureKeyframeTensorBundle(hydrated, options);
+    return {
+      keyframeId: String(hydrated.id),
+      cacheKey: bundle.cacheKey,
+      cacheHit: Boolean(bundle.cacheHit),
+      featureCount: hydrated.count,
+    };
+  });
+  const elapsedMs = roundMs(performance.now() - started);
+  state.keyframeTensorStats.precacheRequests += 1;
+  state.keyframeTensorStats.precacheKeyframes += rows.length;
+  state.keyframeTensorStats.lastPrecacheElapsedMs = elapsedMs;
+  return {
+    status: "ready",
+    requestedKeyframeCount: explicitIds.length,
+    includeNeighbors,
+    selectedKeyframeCount: selected.length,
+    cachedKeyframeCount: rows.length,
+    elapsedMs,
+    before,
+    after: keyframeTensorCacheStats(),
+    rows,
+    runtimeDiagnostics: runtimeDiagnostics(),
+  };
+}
+
+function keyframeTensorCacheStats() {
+  return {
+    hits: Number(state.keyframeTensorStats.hits || 0),
+    misses: Number(state.keyframeTensorStats.misses || 0),
+    created: Number(state.keyframeTensorStats.created || 0),
+    evicted: Number(state.keyframeTensorStats.evicted || 0),
+    precacheRequests: Number(state.keyframeTensorStats.precacheRequests || 0),
+    precacheKeyframes: Number(state.keyframeTensorStats.precacheKeyframes || 0),
+    lastPrecacheElapsedMs: Number(state.keyframeTensorStats.lastPrecacheElapsedMs || 0),
+    entries: state.keyframeTensorCache.size,
+  };
+}
+
+function keyframeTensorCacheKey(keyframe, options = {}) {
+  const provider = state.provider || state.activeProvider || "unknown";
+  const profile = options.runtimeProfile || options.profile || state.options.runtimeProfile || state.options.profile || "default";
+  const architecture = normalizedOnnxArchitecture(options);
+  const count = Number(keyframe?.count || 0);
+  const dim = Number(keyframe?.descriptorDim || 64);
+  return [provider, profile, architecture, keyframe?.id || "unknown", count, dim].join("|");
+}
+
+function ensureKeyframeTensorBundle(keyframe, options = {}) {
+  const cacheKey = keyframeTensorCacheKey(keyframe, options);
+  const cached = state.keyframeTensorCache.get(cacheKey);
+  if (cached) {
+    state.keyframeTensorStats.hits += 1;
+    touchKeyframeTensorCache(cacheKey);
+    return { ...cached, cacheHit: true, cacheKey };
+  }
+  state.keyframeTensorStats.misses += 1;
+  const count = Number(keyframe.count || 0);
+  const descriptorDim = Number(keyframe.descriptorDim || 64);
+  const bundle = {
+    keypointTensor: keyframe.keypointTensor || new state.ort.Tensor(
+      "float32",
+      keyframe.normalizedKeypoints || normalizeKptsForGlue(keyframe.keypoints, keyframe.width || 0, keyframe.height || 0),
+      [1, count, 2],
+    ),
+    descriptorTensor: keyframe.descriptorTensor || new state.ort.Tensor(
+      "float32",
+      keyframe.descriptors,
+      [1, count, descriptorDim],
+    ),
+    count,
+    descriptorDim,
+    createdAt: Date.now(),
+  };
+  keyframe.keypointTensor = bundle.keypointTensor;
+  keyframe.descriptorTensor = bundle.descriptorTensor;
+  state.keyframeTensorStats.created += 1;
+  state.keyframeTensorCache.set(cacheKey, bundle);
+  state.keyframeTensorOrder.push(cacheKey);
+  trimKeyframeTensorCache();
+  return { ...bundle, cacheHit: false, cacheKey };
+}
+
+function touchKeyframeTensorCache(cacheKey) {
+  const index = state.keyframeTensorOrder.indexOf(cacheKey);
+  if (index >= 0) state.keyframeTensorOrder.splice(index, 1);
+  state.keyframeTensorOrder.push(cacheKey);
+}
+
+function trimKeyframeTensorCache() {
+  const maxEntries = Math.max(1, Number(state.options.keyframeTensorCacheMaxEntries || DEFAULTS.keyframeTensorCacheMaxEntries));
+  while (state.keyframeTensorOrder.length > maxEntries) {
+    const evictKey = state.keyframeTensorOrder.shift();
+    if (!evictKey) continue;
+    state.keyframeTensorCache.delete(evictKey);
+    state.keyframeTensorStats.evicted += 1;
+  }
+}
+
+function evictTensorCacheForKeyframe(keyframeId) {
+  const needle = `|${String(keyframeId)}|`;
+  for (const cacheKey of Array.from(state.keyframeTensorCache.keys())) {
+    if (!cacheKey.includes(needle)) continue;
+    state.keyframeTensorCache.delete(cacheKey);
+    const index = state.keyframeTensorOrder.indexOf(cacheKey);
+    if (index >= 0) state.keyframeTensorOrder.splice(index, 1);
+    state.keyframeTensorStats.evicted += 1;
+  }
 }
 
 function scheduleKeyframePrefetch(keyframeId) {
@@ -1605,7 +1771,9 @@ function scheduleKeyframePrefetch(keyframeId) {
       const keyframe = state.keyframes.find((candidate) => String(candidate.id) === String(id));
       if (!keyframe || keyframe.hydrated || state.hydratedKeyframes.has(String(keyframe.id))) return null;
       try {
-        return await ensureHydratedKeyframe(keyframe);
+        const hydrated = await ensureHydratedKeyframe(keyframe);
+        if (normalizedOnnxArchitecture(state.options) === "split") ensureKeyframeTensorBundle(hydrated, state.options);
+        return hydrated;
       } catch {
         return null;
       }
@@ -2381,6 +2549,9 @@ async function runFusedImagePair(retrievalQuery, imageData, keyframe, options) {
 
 async function runLighterGlue(query, keyframe, options) {
   const started = performance.now();
+  const tensorStarted = performance.now();
+  const keyframeTensorBundle = ensureKeyframeTensorBundle(keyframe, options);
+  const keyframeTensorElapsedMs = roundMs(performance.now() - tensorStarted);
   postProgress({
     kind: "model-run",
     stage: "lighterglue:start",
@@ -2388,13 +2559,15 @@ async function runLighterGlue(query, keyframe, options) {
     keyframeId: keyframe?.id || null,
     queryFeatures: query.count,
     keyframeFeatures: keyframe.count,
+    keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
+    keyframeTensorElapsedMs,
   });
   await flushProgress();
   const feeds = {
     kpts0: query.keypointTensor || new state.ort.Tensor("float32", normalizeKptsForGlue(query.keypoints, query.width, query.height), [1, query.count, 2]),
-    kpts1: keyframe.keypointTensor || new state.ort.Tensor("float32", keyframe.normalizedKeypoints || normalizeKptsForGlue(keyframe.keypoints, keyframe.width || query.width, keyframe.height || query.height), [1, keyframe.count, 2]),
+    kpts1: keyframeTensorBundle.keypointTensor,
     desc0: query.descriptorTensor || new state.ort.Tensor("float32", query.descriptors, [1, query.count, 64]),
-    desc1: keyframe.descriptorTensor || new state.ort.Tensor("float32", keyframe.descriptors, [1, keyframe.count, 64]),
+    desc1: keyframeTensorBundle.descriptorTensor,
   };
   const output = await withTimeout(
     state.lighterGlueSession.run(feeds),
@@ -2421,6 +2594,9 @@ async function runLighterGlue(query, keyframe, options) {
     geometryMatchCount: matches.length,
     candidateMode: "single-frame",
     matcherArchitecture: "split",
+    keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
+    keyframeTensorCacheKey: keyframeTensorBundle.cacheKey,
+    keyframeTensorElapsedMs,
     elapsedMs: roundMs(performance.now() - started),
   };
   postProgress({
@@ -2429,6 +2605,8 @@ async function runLighterGlue(query, keyframe, options) {
     provider: state.provider,
     keyframeId: keyframe?.id || null,
     matchCount: matches.length,
+    keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
+    keyframeTensorElapsedMs,
     elapsedMs: response.elapsedMs,
   });
   return response;
