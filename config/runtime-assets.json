@@ -534,6 +534,16 @@
       "license": "Apache-2.0",
       "source": "noahzhy/xfeat_lightglue_onnx 155f5e1b6c9453162c286eacb0003fa4b8461a9c/onnx/lighterglue_L3.onnx",
       "note": "Default high-quality browser matcher. Deeper LighterGlue variants are deferred until phone benchmarks justify the payload."
+    },
+    {
+      "id": "xfeat-lighterglue-pair-l3-384-640",
+      "name": "xfeat_lighterglue_pair_L3_384_640x640.onnx",
+      "path": "models/xfeat_lighterglue_pair_L3_384_640x640.onnx",
+      "url": "optional:combined-image-pair-export",
+      "license": "Apache-2.0",
+      "source": "Generated from noahzhy/xfeat_lightglue_onnx / verlab accelerated_features XFeat+LighterGlue pair wrapper.",
+      "optional": true,
+      "note": "Experimental fused image-pair benchmark path. The runtime still uses OpenCV WASM PnP against MapPack 3D landmarks after linking fused keyframe pixels back to sidecar landmarks."
     }
   ]
 }

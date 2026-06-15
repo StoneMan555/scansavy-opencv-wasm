@@ -46,6 +46,7 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.equal(config.canonicalExport.dynamicImageDimensions, true);
   assert.ok(config.models.some((model) => model.id === "xfeat-2048-dynamic" && model.path.endsWith(".onnx")));
   assert.ok(config.models.some((model) => model.id === "lighterglue-l3" && model.source.includes("noahzhy")));
+  assert.ok(config.models.some((model) => model.id === "xfeat-lighterglue-pair-l3-384-640" && model.optional === true));
   assert.ok(config.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.wasm.min.js"));
   assert.ok(config.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.webgpu.min.js"));
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].providers, ["webnn", "webgpu", "wasm"]);
@@ -84,6 +85,8 @@ test("High-quality runtime worker exposes XFeat/LighterGlue and projection messa
     "requestWebGpuAdapter",
     "createWebGpuPreflightDevice",
     "inferXFeatInputShape",
+    "runFusedImagePair",
+    'value === "fused-pair"',
     "webgpu-adapter-sweep-v2",
   ]) {
     assert.match(worker, new RegExp(token));

@@ -48,6 +48,7 @@ assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-2048-dynamic"
 assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-384-fixed" && model.optional === true));
 assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-512-fixed" && model.optional === true));
 assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3"));
+assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-lighterglue-pair-l3-384-640" && model.optional === true));
 assert.ok(runtimeAssets.onnxRuntime.assets.some((asset) => asset.path.includes("ort-wasm")));
 assert.ok(runtimeAssets.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.all.min.js"));
 assert.deepEqual(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-webgpu"]?.providers, ["webgpu", "wasm"]);

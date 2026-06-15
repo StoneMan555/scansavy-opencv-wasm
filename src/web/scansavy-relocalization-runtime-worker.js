@@ -14,9 +14,11 @@ const DEFAULTS = {
   ortJsepWasmFile: "/scansavy-relocalization-runtime/ort/ort-wasm-simd-threaded.jsep.wasm",
   xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
   lighterGlueUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3.onnx",
+  fusedPairUrl: "/scansavy-relocalization-runtime/models/xfeat_lighterglue_pair_L3_384_640x640.onnx",
   opencvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv-geometry.js",
   fallbackOpenCvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv.js",
   providers: ["webgpu", "wasm"],
+  onnxArchitecture: "split",
   maxModelSide: 640,
   fixedInputWidth: 0,
   fixedInputHeight: 0,
@@ -29,6 +31,8 @@ const DEFAULTS = {
   adaptiveCandidateEscalation: true,
   retrievalConfidenceThreshold: 0.12,
   lighterGlueScoreThreshold: 0.2,
+  fusedPairScoreThreshold: 0,
+  fusedPairKeyframeMaxLinkDistancePx: 10,
   minMatches: 8,
   minInliers: 5,
   minConfidence: 0.2,
@@ -72,6 +76,7 @@ const DEFAULTS = {
   wasmSessionCreateTimeoutMs: 90000,
   xfeatInferenceTimeoutMs: 30000,
   lighterGlueInferenceTimeoutMs: 30000,
+  fusedPairInferenceTimeoutMs: 30000,
   webnnInferenceTimeoutMs: 8000,
   webgpuPowerPreference: "high-performance",
   webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -447,6 +452,7 @@ const state = {
   activeProvider: null,
   xfeatSession: null,
   lighterGlueSession: null,
+  fusedPairSession: null,
   opencv: null,
   sidecar: null,
   sidecarBaseUrl: null,
@@ -467,6 +473,7 @@ const state = {
   warmupSummary: null,
   assetBufferCache: new Map(),
   assetBufferCacheBytes: 0,
+  keyframeImageDataCache: new Map(),
   preprocessCanvas: null,
   preprocessSourceCanvas: null,
   initStage: "idle",
@@ -474,6 +481,7 @@ const state = {
   initStageUpdatedAt: 0,
   initTimings: [],
   initError: null,
+  lastInitRequest: null,
 };
 
 self.onmessage = async (event) => {
@@ -589,8 +597,12 @@ function runtimeDiagnostics() {
     initElapsedMs: state.initStartedAt ? roundMs(performance.now() - state.initStartedAt) : 0,
     initTimings: state.initTimings,
     initError: state.initError,
+    lastInitRequest: state.lastInitRequest,
     maxModelSide: Number(state.options.maxModelSide || DEFAULTS.maxModelSide),
+    onnxArchitecture: normalizedOnnxArchitecture(state.options),
     xfeatUrl: state.options.xfeatUrl || DEFAULTS.xfeatUrl,
+    fusedPairUrl: state.options.fusedPairUrl || DEFAULTS.fusedPairUrl,
+    hasFusedPairSession: Boolean(state.fusedPairSession),
     fixedInputWidth: Number(state.options.fixedInputWidth || 0),
     fixedInputHeight: Number(state.options.fixedInputHeight || 0),
     maxQueryFeatures: Number(state.options.maxQueryFeatures || state.options.topK || DEFAULTS.maxQueryFeatures),
@@ -648,6 +660,7 @@ function runtimeDiagnostics() {
     wasmSessionCreateTimeoutMs: Number(state.options.wasmSessionCreateTimeoutMs || DEFAULTS.wasmSessionCreateTimeoutMs),
     xfeatInferenceTimeoutMs: Number(state.options.xfeatInferenceTimeoutMs || DEFAULTS.xfeatInferenceTimeoutMs),
     lighterGlueInferenceTimeoutMs: Number(state.options.lighterGlueInferenceTimeoutMs || DEFAULTS.lighterGlueInferenceTimeoutMs),
+    fusedPairInferenceTimeoutMs: Number(state.options.fusedPairInferenceTimeoutMs || DEFAULTS.fusedPairInferenceTimeoutMs),
     webnnInferenceTimeoutMs: Number(state.options.webnnInferenceTimeoutMs || DEFAULTS.webnnInferenceTimeoutMs),
     activeProvider: state.activeProvider || null,
     webgpuWasmNumThreads: state.options.webgpuWasmNumThreads ?? DEFAULTS.webgpuWasmNumThreads,
@@ -664,9 +677,22 @@ async function initRuntime(payload) {
   state.initError = null;
   setInitStage("start");
   const requestedOptions = payload.options || payload;
+  state.lastInitRequest = {
+    runtimeProfile: requestedOptions.runtimeProfile || requestedOptions.profile || null,
+    providers: requestedOptions.providers || null,
+    onnxArchitecture: requestedOptions.onnxArchitecture || requestedOptions.ortArchitecture || null,
+    fusedPairUrl: requestedOptions.fusedPairUrl || null,
+    profileOverrideKeys: Array.isArray(requestedOptions.profileOverrideKeys)
+      ? requestedOptions.profileOverrideKeys.map(String)
+      : [],
+  };
   const profileName = requestedOptions.runtimeProfile || requestedOptions.profile || DEFAULTS.runtimeProfile || "phone-webgpu";
   state.options = { ...DEFAULTS, ...requestedOptions, runtimeProfile: profileName };
-  setInitStage("manifest:start", { profileName });
+  setInitStage("manifest:start", {
+    profileName,
+    onnxArchitecture: state.lastInitRequest.onnxArchitecture,
+    hasFusedPairUrl: Boolean(state.lastInitRequest.fusedPairUrl),
+  });
   state.manifest = await maybeFetchJson(requestedOptions.manifestUrl || DEFAULTS.manifestUrl);
   setInitStage("manifest:ready", { hasManifest: Boolean(state.manifest) });
   const manifestProfiles = state.manifest?.runtimeProfiles || state.manifest?.onnxRuntime?.runtimeProfiles || {};
@@ -690,6 +716,28 @@ async function initRuntime(payload) {
   state.warmedUp = false;
   state.warmupSummary = null;
   applyProfileDefaults(profileOptions, profileOverrideKeys);
+  for (const key of profileOverrideKeys) {
+    if (Object.prototype.hasOwnProperty.call(effectiveRequestedOptions, key)) {
+      state.options[key] = effectiveRequestedOptions[key];
+    }
+  }
+  for (const key of [
+    "onnxArchitecture",
+    "ortArchitecture",
+    "fusedPairUrl",
+    "fusedPairScoreThreshold",
+    "fusedPairKeyframeMaxLinkDistancePx",
+  ]) {
+    if (Object.prototype.hasOwnProperty.call(effectiveRequestedOptions, key)) {
+      state.options[key] = effectiveRequestedOptions[key];
+    }
+  }
+  if (state.lastInitRequest.onnxArchitecture) {
+    state.options.onnxArchitecture = state.lastInitRequest.onnxArchitecture;
+  }
+  if (state.lastInitRequest.fusedPairUrl) {
+    state.options.fusedPairUrl = state.lastInitRequest.fusedPairUrl;
+  }
   applyModelShapeDefaults(state.options);
   setInitStage("ort:start", {
     providers: Array.isArray(state.options.providers) ? state.options.providers.join(",") : String(state.options.providers || ""),
@@ -723,6 +771,7 @@ async function initRuntime(payload) {
     hasOpenCvGeometry: Boolean(state.opencv?.solvePnPRansac && state.opencv?.projectPoints),
     hasXFeat: Boolean(state.xfeatSession),
     hasLighterGlue: Boolean(state.lighterGlueSession),
+    hasFusedPair: Boolean(state.fusedPairSession),
     elapsedMs: roundMs(performance.now() - started),
   };
 }
@@ -731,6 +780,7 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
   const explicitOverrides = new Set(Array.isArray(overrideKeys) ? overrideKeys.map(String) : []);
   for (const key of [
     "providers",
+    "onnxArchitecture",
     "wasmNumThreads",
     "webgpuWasmNumThreads",
     "wasmAutoThreadMax",
@@ -764,6 +814,9 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
     "parallelBurstCandidatesPerFrame",
     "xfeatUrl",
     "fallbackXFeatUrl",
+    "fusedPairUrl",
+    "fusedPairScoreThreshold",
+    "fusedPairKeyframeMaxLinkDistancePx",
     "webgpuPowerPreference",
     "webgpuAdapterPowerPreferences",
     "webgpuAdapterFeatureLevels",
@@ -866,6 +919,9 @@ async function createSessions(providers) {
       const sessionStarted = performance.now();
       const sessionOptions = sessionOptionsFor(provider, state.options);
       const sessionTimeoutMs = sessionTimeoutForProvider(provider, state.options);
+      state.xfeatSession = null;
+      state.lighterGlueSession = null;
+      state.fusedPairSession = null;
       setInitStage(`sessions:${provider}:xfeat:start`, {
         timeoutMs: sessionTimeoutMs,
         xfeatUrl: state.options.xfeatUrl || DEFAULTS.xfeatUrl,
@@ -890,12 +946,25 @@ async function createSessions(providers) {
       );
       state.lighterGlueSession = lighterGlueSessionResult.session;
       setInitStage(`sessions:${provider}:lighterglue:ready`);
+      if (usesFusedPairArchitecture(state.options)) {
+        const fusedPairUrl = resolveUrl(state.options.fusedPairUrl || DEFAULTS.fusedPairUrl);
+        setInitStage(`sessions:${provider}:fused-pair:start`, { fusedPairUrl });
+        const fusedPairSessionResult = await withTimeout(
+          createOrtSessionFromUrl(fusedPairUrl, sessionOptions, "Fused XFeat+LighterGlue image-pair model"),
+          sessionTimeoutMs,
+          `${provider} fused XFeat+LighterGlue session creation`,
+        );
+        state.fusedPairSession = fusedPairSessionResult.session;
+        setInitStage(`sessions:${provider}:fused-pair:ready`);
+      }
       state.provider = provider;
       attempts.push({
         provider,
         status: "ready",
         xfeatUrl: xfeatSessionResult.url,
         xfeatFallbackUsed: xfeatSessionResult.fallbackUsed,
+        onnxArchitecture: normalizedOnnxArchitecture(state.options),
+        hasFusedPairSession: Boolean(state.fusedPairSession),
         elapsedMs: roundMs(performance.now() - sessionStarted),
       });
       state.providerAttempts = attempts;
@@ -930,8 +999,28 @@ function sessionTimeoutForProvider(provider, options) {
 
 function inferenceTimeoutMs(model, options) {
   if (state.provider === "webnn") return Number(options.webnnInferenceTimeoutMs || DEFAULTS.webnnInferenceTimeoutMs);
+  if (model === "fused-pair") return Number(options.fusedPairInferenceTimeoutMs || DEFAULTS.fusedPairInferenceTimeoutMs);
   if (model === "lighterglue") return Number(options.lighterGlueInferenceTimeoutMs || DEFAULTS.lighterGlueInferenceTimeoutMs);
   return Number(options.xfeatInferenceTimeoutMs || DEFAULTS.xfeatInferenceTimeoutMs);
+}
+
+function normalizedOnnxArchitecture(options = state.options) {
+  const value = String(options.onnxArchitecture || options.ortArchitecture || DEFAULTS.onnxArchitecture || "split").toLowerCase();
+  if (
+    value === "fused" ||
+    value === "fusedpair" ||
+    value === "fused-pair" ||
+    value === "fused_pair" ||
+    value === "image-pair" ||
+    value === "image_pair"
+  ) {
+    return "fused-pair";
+  }
+  return "split";
+}
+
+function usesFusedPairArchitecture(options = state.options) {
+  return normalizedOnnxArchitecture(options) === "fused-pair";
 }
 
 function withTimeout(promise, timeoutMs, label) {
@@ -1604,6 +1693,12 @@ async function hydrateKeyframe(keyframe, sidecarBaseUrl, sidecar) {
     width: Number(keyframe.width || sidecar.cameraModel?.width || 0),
     height: Number(keyframe.height || sidecar.cameraModel?.height || 0),
     cameraModel: keyframe.cameraModel || sidecar.cameraModel || null,
+    assets,
+    sidecarBaseUrl,
+    sourceRgbPath: keyframe.sourceRgbPath || "",
+    imageAsset: assets.image || assets.fusedPairImage || "",
+    imageUrl: assets.image || assets.fusedPairImage ? resolveUrl(assets.image || assets.fusedPairImage, sidecarBaseUrl) : "",
+    modelInputTransform: keyframe.modelInputTransform || null,
     keypoints: keypoints.slice(0, featureCount * 2),
     descriptors: descriptorRows,
     scores: scores?.length ? scores.slice(0, featureCount) : null,
@@ -1808,8 +1903,8 @@ async function localizeBurstParallel(frames, options, matcherBudget) {
     }
     const frameResult = perFrame.get(pair.entry);
     frameResult.candidateKeyframes.push(keyframe.id);
-    const matched = await runLighterGlue(pair.entry.extracted, keyframe, options);
-    const candidate = solvePnpForMatches(matched, keyframe, pair.entry.extracted, pair.entry.frame.frameIndex ?? null, options);
+    const matched = await runMatcherForCandidate(pair.entry.imageData, pair.entry.extracted, keyframe, options);
+    const candidate = solvePnpForMatches(matched, keyframe, matched.query || pair.entry.extracted, pair.entry.frame.frameIndex ?? null, options);
     candidate.parallelBurstExtraction = true;
     candidate.burstFrameOrderIndex = pair.entry.frameOrderIndex;
     candidate.shortlistRank = pair.rank;
@@ -2024,8 +2119,8 @@ async function localizeFrame(frame, options, matcherBudget = null) {
       matcherBudget.tried += 1;
       matcherBudget.remaining -= 1;
     }
-    const matched = await runLighterGlue(extracted, keyframe, options);
-    const candidate = solvePnpForMatches(matched, keyframe, extracted, frame.frameIndex ?? null, options);
+    const matched = await runMatcherForCandidate(imageData, extracted, keyframe, options);
+    const candidate = solvePnpForMatches(matched, keyframe, matched.query || extracted, frame.frameIndex ?? null, options);
     candidateResults.push(candidate);
     if (options.stopAfterAcceptedCandidate !== false && candidate.status === "ready") {
       const meetsGate = candidate.matchCount >= Number(options.minMatches)
@@ -2169,6 +2264,121 @@ async function runXFeat(imageData, options) {
   return response;
 }
 
+async function runMatcherForCandidate(imageData, query, keyframe, options) {
+  if (usesFusedPairArchitecture(options)) {
+    return runFusedImagePair(query, imageData, keyframe, options);
+  }
+  return runLighterGlue(query, keyframe, options);
+}
+
+async function runFusedImagePair(retrievalQuery, imageData, keyframe, options) {
+  if (!state.fusedPairSession) {
+    throw new Error("Fused XFeat+LighterGlue image-pair session is not ready.");
+  }
+  const started = performance.now();
+  postProgress({
+    kind: "model-run",
+    stage: "fused-pair:start",
+    provider: state.provider,
+    keyframeId: keyframe?.id || null,
+    width: imageData.width,
+    height: imageData.height,
+  });
+  await flushProgress();
+
+  const keyframeImageData = await loadKeyframeImageData(keyframe);
+  const queryPrep = preprocessImage(imageData, options);
+  const keyframePrep = preprocessImage(keyframeImageData, {
+    ...options,
+    fixedInputWidth: Number(options.fixedInputWidth || DEFAULTS.fixedInputWidth || 640),
+    fixedInputHeight: Number(options.fixedInputHeight || DEFAULTS.fixedInputHeight || 640),
+  });
+  const input0 = new state.ort.Tensor("float32", queryPrep.tensor, [1, 3, queryPrep.height, queryPrep.width]);
+  const input1 = new state.ort.Tensor("float32", keyframePrep.tensor, [1, 3, keyframePrep.height, keyframePrep.width]);
+  const inputNames = Array.isArray(state.fusedPairSession.inputNames) ? state.fusedPairSession.inputNames : [];
+  const feeds = {
+    [inputNames[0] || "image0"]: input0,
+    [inputNames[1] || "image1"]: input1,
+  };
+  const inferenceStarted = performance.now();
+  const output = await withTimeout(
+    state.fusedPairSession.run(feeds),
+    inferenceTimeoutMs("fused-pair", options),
+    `Fused XFeat+LighterGlue ${state.provider || "unknown"} inference`,
+  );
+  const inferenceElapsedMs = roundMs(performance.now() - inferenceStarted);
+  const keypoints0Raw = outputTensor(output, ["keypoints0", "kpts0", "mkpts0"], 0);
+  const keypoints1Raw = outputTensor(output, ["keypoints1", "kpts1", "mkpts1"], 1);
+  const matchesRaw = outputTensor(output, ["matches", "matches0", "indices"], 6);
+  const scoresRaw = outputTensor(output, ["match_scores", "scores", "mscores", "matching_scores"], 7, false);
+  const queryKeypoints = mapKeypointsToSource(keypoints0Raw.data, queryPrep);
+  const keyframeModelKeypoints = mapKeypointsToSource(keypoints1Raw.data, keyframePrep);
+  const queryCount = Math.floor(queryKeypoints.length / 2);
+  const keyframePairCount = Math.floor(keyframeModelKeypoints.length / 2);
+  const rawPairs = parseFusedPairMatches(matchesRaw, scoresRaw, queryCount, keyframePairCount, Number(options.fusedPairScoreThreshold ?? DEFAULTS.fusedPairScoreThreshold));
+  const linkMaxDistancePx = Math.max(0.5, Number(options.fusedPairKeyframeMaxLinkDistancePx || DEFAULTS.fusedPairKeyframeMaxLinkDistancePx));
+  const matches = [];
+  const seenQuery = new Set();
+  const seenMap = new Set();
+  const linkDistances = [];
+  for (const pair of rawPairs) {
+    if (seenQuery.has(pair.queryIndex)) continue;
+    const mapPoint = mapModelPointToKeyframeSource(
+      keyframeModelKeypoints[pair.mapIndex * 2],
+      keyframeModelKeypoints[pair.mapIndex * 2 + 1],
+      keyframe,
+    );
+    const nearest = nearestKeyframeFeatureIndex(keyframe, mapPoint.x, mapPoint.y, linkMaxDistancePx);
+    if (!nearest || seenMap.has(nearest.index)) continue;
+    seenQuery.add(pair.queryIndex);
+    seenMap.add(nearest.index);
+    linkDistances.push(nearest.distancePx);
+    matches.push({
+      queryIndex: pair.queryIndex,
+      mapIndex: nearest.index,
+      score: pair.score,
+      keyframePairIndex: pair.mapIndex,
+      keyframeLinkDistancePx: round6(nearest.distancePx),
+    });
+  }
+  const query = {
+    ...retrievalQuery,
+    keypoints: queryKeypoints,
+    width: imageData.width,
+    height: imageData.height,
+    count: queryCount,
+    descriptorCentroid: retrievalQuery?.descriptorCentroid || null,
+    prep: queryPrep,
+  };
+  const elapsedMs = roundMs(performance.now() - started);
+  const response = {
+    keyframe,
+    query,
+    matches,
+    rawMatchCount: rawPairs.length,
+    geometryMatchCount: matches.length,
+    candidateMode: "fused-image-pair",
+    matcherArchitecture: "fused-pair",
+    inferenceElapsedMs,
+    keyframeImageUrl: keyframe.imageUrl || "",
+    keyframePairCount,
+    queryPairCount: queryCount,
+    meanKeyframeLinkDistancePx: linkDistances.length ? round6(mean(linkDistances)) : null,
+    elapsedMs,
+  };
+  postProgress({
+    kind: "model-run",
+    stage: "fused-pair:done",
+    provider: state.provider,
+    keyframeId: keyframe?.id || null,
+    rawMatchCount: rawPairs.length,
+    geometryMatchCount: matches.length,
+    inferenceElapsedMs,
+    elapsedMs,
+  });
+  return response;
+}
+
 async function runLighterGlue(query, keyframe, options) {
   const started = performance.now();
   postProgress({
@@ -2203,7 +2413,16 @@ async function runLighterGlue(query, keyframe, options) {
     if (queryIndex < 0 || mapIndex < 0 || queryIndex >= query.count || mapIndex >= keyframe.count) continue;
     matches.push({ queryIndex, mapIndex, score });
   }
-  const response = { keyframe, query, matches, elapsedMs: roundMs(performance.now() - started) };
+  const response = {
+    keyframe,
+    query,
+    matches,
+    rawMatchCount: matches.length,
+    geometryMatchCount: matches.length,
+    candidateMode: "single-frame",
+    matcherArchitecture: "split",
+    elapsedMs: roundMs(performance.now() - started),
+  };
   postProgress({
     kind: "model-run",
     stage: "lighterglue:done",
@@ -2215,6 +2434,100 @@ async function runLighterGlue(query, keyframe, options) {
   return response;
 }
 
+async function loadKeyframeImageData(keyframe) {
+  const imageUrl = keyframe?.imageUrl || (keyframe?.imageAsset ? resolveUrl(keyframe.imageAsset, keyframe.sidecarBaseUrl || state.sidecarBaseUrl) : "");
+  if (!imageUrl) {
+    throw new Error(`Keyframe ${keyframe?.id || "unknown"} is missing a fused-pair image asset.`);
+  }
+  const cached = state.keyframeImageDataCache.get(imageUrl);
+  if (cached?.imageData) return cached.imageData;
+  if (cached?.promise) return cached.promise;
+  const entry = {
+    imageData: null,
+    promise: fetch(imageUrl, { cache: "force-cache" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`Failed to fetch fused-pair keyframe image ${imageUrl}: HTTP ${response.status}`);
+        const bitmap = await createImageBitmap(await response.blob());
+        const width = bitmap.width;
+        const height = bitmap.height;
+        const canvas = reusableOffscreenCanvas("keyframeImageCanvas", width, height);
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        context.drawImage(bitmap, 0, 0, width, height);
+        bitmap.close?.();
+        const imageData = context.getImageData(0, 0, width, height);
+        entry.imageData = imageData;
+        entry.promise = null;
+        return imageData;
+      })
+      .catch((error) => {
+        state.keyframeImageDataCache.delete(imageUrl);
+        throw error;
+      }),
+  };
+  state.keyframeImageDataCache.set(imageUrl, entry);
+  return entry.promise;
+}
+
+function parseFusedPairMatches(matchesRaw, scoresRaw, queryCount, keyframeCount, threshold) {
+  const matchesData = matchesRaw?.data || [];
+  const scoresData = scoresRaw?.data || [];
+  const pairs = [];
+  const dims = Array.isArray(matchesRaw?.dims) ? matchesRaw.dims.map(Number) : [];
+  const lastDim = dims.length ? dims[dims.length - 1] : null;
+  const looksLikePairList = lastDim === 2 || matchesData.length % 2 === 0 && matchesData.length !== queryCount;
+  if (looksLikePairList) {
+    for (let i = 0; i + 1 < matchesData.length; i += 2) {
+      const queryIndex = Number(matchesData[i]);
+      const mapIndex = Number(matchesData[i + 1]);
+      const score = Number(scoresData[Math.floor(i / 2)] ?? 1);
+      if (score < threshold) continue;
+      if (!Number.isInteger(queryIndex) || !Number.isInteger(mapIndex)) continue;
+      if (queryIndex < 0 || mapIndex < 0 || queryIndex >= queryCount || mapIndex >= keyframeCount) continue;
+      pairs.push({ queryIndex, mapIndex, score });
+    }
+    return pairs;
+  }
+  for (let queryIndex = 0; queryIndex < matchesData.length; queryIndex += 1) {
+    const mapIndex = Number(matchesData[queryIndex]);
+    const score = Number(scoresData[queryIndex] ?? 1);
+    if (score < threshold) continue;
+    if (!Number.isInteger(mapIndex)) continue;
+    if (mapIndex < 0 || queryIndex >= queryCount || mapIndex >= keyframeCount) continue;
+    pairs.push({ queryIndex, mapIndex, score });
+  }
+  return pairs;
+}
+
+function mapModelPointToKeyframeSource(x, y, keyframe) {
+  const transform = keyframe?.modelInputTransform || {};
+  const scale = Number(transform.scale || 1);
+  const padX = Number(transform.padX || 0);
+  const padY = Number(transform.padY || 0);
+  if (!Number.isFinite(scale) || scale <= 0) return { x: Number(x || 0), y: Number(y || 0) };
+  return {
+    x: (Number(x || 0) - padX) / scale,
+    y: (Number(y || 0) - padY) / scale,
+  };
+}
+
+function nearestKeyframeFeatureIndex(keyframe, x, y, maxDistancePx) {
+  if (!keyframe?.keypoints?.length) return null;
+  const maxDistanceSq = maxDistancePx * maxDistancePx;
+  let bestIndex = -1;
+  let bestDistanceSq = maxDistanceSq;
+  for (let index = 0; index < keyframe.count; index += 1) {
+    if (!hasValidLandmark(keyframe, index)) continue;
+    const dx = Number(keyframe.keypoints[index * 2]) - x;
+    const dy = Number(keyframe.keypoints[index * 2 + 1]) - y;
+    const distanceSq = dx * dx + dy * dy;
+    if (distanceSq <= bestDistanceSq) {
+      bestDistanceSq = distanceSq;
+      bestIndex = index;
+    }
+  }
+  return bestIndex >= 0 ? { index: bestIndex, distancePx: Math.sqrt(bestDistanceSq) } : null;
+}
+
 function solvePnpForMatches(matched, keyframe, query, frameIndex, options) {
   const matches = matched.matches || [];
   if (matches.length < 6) {
@@ -2222,7 +2535,12 @@ function solvePnpForMatches(matched, keyframe, query, frameIndex, options) {
       keyframe,
       frameIndex,
       `Only ${matches.length} XFeat/LighterGlue matches; PnP needs at least 6.`,
-      { matcherElapsedMs: matched.elapsedMs, rawMatchCount: matches.length, geometryMatchCount: 0 },
+      {
+        matcherElapsedMs: matched.elapsedMs,
+        rawMatchCount: matched.rawMatchCount ?? matches.length,
+        geometryMatchCount: matched.geometryMatchCount ?? 0,
+        candidateMode: matched.candidateMode,
+      },
     );
   }
 
@@ -2232,7 +2550,12 @@ function solvePnpForMatches(matched, keyframe, query, frameIndex, options) {
       keyframe,
       frameIndex,
       `Only ${pnpInput.matchCount} geometry-backed XFeat/LighterGlue matches from ${matches.length} visual matches; PnP needs at least 6.`,
-      { matcherElapsedMs: matched.elapsedMs, rawMatchCount: matches.length, geometryMatchCount: pnpInput.matchCount },
+      {
+        matcherElapsedMs: matched.elapsedMs,
+        rawMatchCount: matched.rawMatchCount ?? matches.length,
+        geometryMatchCount: pnpInput.matchCount,
+        candidateMode: matched.candidateMode,
+      },
     );
     attachPnpInput(failed, pnpInput);
     return failed;
@@ -2243,13 +2566,13 @@ function solvePnpForMatches(matched, keyframe, query, frameIndex, options) {
     imageArray: pnpInput.imageArray,
     cameraModel: cameraModelForQuery(keyframe.cameraModel || state.sidecar.cameraModel, query),
     matchCount: pnpInput.matchCount,
-    rawMatchCount: matches.length,
+    rawMatchCount: matched.rawMatchCount ?? matches.length,
     geometryMatchCount: pnpInput.matchCount,
     matcherElapsedMs: matched.elapsedMs,
     keyframeId: keyframe.id,
     frameIndex,
     descriptorMode: state.sidecar?.descriptorMode || "xfeat-lg-v0",
-    candidateMode: "single-frame",
+    candidateMode: matched.candidateMode || "single-frame",
   });
   attachPnpInput(solved, pnpInput);
   return solved;
@@ -2487,6 +2810,7 @@ function preprocessImage(imageData, options) {
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const sourceCanvas = reusableOffscreenCanvas("preprocessSourceCanvas", imageData.width, imageData.height);
   sourceCanvas.getContext("2d").putImageData(imageData, 0, 0);
+  ctx.clearRect(0, 0, width, height);
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "medium";
   ctx.drawImage(sourceCanvas, 0, 0, resizedWidth, resizedHeight);
@@ -3040,6 +3364,13 @@ function round6(value) {
   return Number(Number(value || 0).toFixed(6));
 }
 
+function mean(values) {
+  const finiteValues = (values || []).map(Number).filter((value) => Number.isFinite(value));
+  return finiteValues.length
+    ? finiteValues.reduce((total, value) => total + value, 0) / finiteValues.length
+    : 0;
+}
+
 function scoreLocalization(result) {
   return (result.confidence || 0) * 1000 + (result.inlierCount || 0) * 10 + (result.matchCount || 0) - (result.reprojectionErrorPx || 0);
 }
@@ -3075,6 +3406,9 @@ function rejectionReason(best, options) {
 
 function requireReady() {
   if (!state.xfeatSession || !state.lighterGlueSession) throw new Error("Runtime has not loaded XFeat + LighterGlue sessions.");
+  if (usesFusedPairArchitecture(state.options) && !state.fusedPairSession) {
+    throw new Error("Runtime has not loaded the fused XFeat+LighterGlue image-pair session.");
+  }
   if (!state.keyframes.length) throw new Error("Runtime has not loaded an xfeat-lg-v0 MapPack sidecar.");
   requireOpenCv();
 }

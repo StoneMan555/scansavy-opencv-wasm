@@ -43,6 +43,31 @@ for (const [fromRelative, toRelative, required] of copies) {
   staged.push({ path: toRelative, bytes: statSync(to).size });
 }
 
+const optionalLocalModels = [
+  [
+    ".local-run/combined-xfeat-lighterglue/xfeat_lighterglue_pair_L3_384_640x640.onnx",
+    "models/xfeat_lighterglue_pair_L3_384_640x640.onnx",
+  ],
+];
+
+for (const [fromRelative, toRelative] of optionalLocalModels) {
+  const from = join(root, fromRelative);
+  const to = join(dist, toRelative);
+  if (!existsSync(from)) {
+    if (existsSync(to)) {
+      staged.push({ path: toRelative, bytes: statSync(to).size, source: "existing-dist" });
+    } else {
+      missingOptional.push(fromRelative);
+    }
+    continue;
+  }
+  mkdirSync(dirname(to), { recursive: true });
+  copyFileSync(from, to);
+  rmSync(`${to}.br`, { force: true });
+  rmSync(`${to}.gz`, { force: true });
+  staged.push({ path: toRelative, bytes: statSync(to).size, source: "local-run" });
+}
+
 const ortSidecars = [
   "ort-wasm-simd-threaded.asyncify.mjs",
   "ort-wasm-simd-threaded.asyncify.wasm",
