@@ -73,7 +73,11 @@ assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgp
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuBurstFrameConcurrency, 4);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuCandidateHydrationConcurrency, 8);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.candidateHydrationConcurrency, 8);
-assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.maxHydratedKeyframes, 96);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.maxHydratedKeyframes, 200);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.prefetchNeighborKeyframes, 200);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.keyframeTensorCacheMaxEntries, 200);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.localNeighborhoodHotRadiusMeters, 8);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.localNeighborhoodWarmRadiusMeters, 20);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.parallelBurstExtraction, false);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.candidateLimit, 2);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["emulator-safe"]?.webgpuPreflightTimeoutMs, 8000);

@@ -21,7 +21,11 @@ worker.postMessage({
     opencvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv-geometry.js",
     runtimeProfile: "phone-webgpu",
     webgpuPowerPreference: "high-performance",
-    webgpuPreferredLayout: "NCHW"
+    webgpuPreferredLayout: "NCHW",
+    localNeighborhoodHotRadiusMeters: 8,
+    localNeighborhoodWarmRadiusMeters: 20,
+    maxHydratedKeyframes: 200,
+    keyframeTensorCacheMaxEntries: 200
   }
 });
 ```
@@ -77,6 +81,8 @@ worker.postMessage({
 ```
 
 `sidecarUrl` may be used instead of an inline sidecar. Relative binary asset URLs inside the sidecar resolve against `sidecarUrl`.
+
+The default ScanSavvy MapPack cache keeps an `8m` hot ring and a `20m` warm ring around the last accepted pose when keyframe positions are available. It caps hydrated keyframes and keyframe tensor bundles at `200`, so local relocalization stays robust without loading a whole large venue.
 
 ## `localizeBurst`
 

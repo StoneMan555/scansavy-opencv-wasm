@@ -2,6 +2,28 @@
 
 const RUNTIME_ADAPTER_DIAGNOSTICS_VERSION = "webgpu-adapter-sweep-v2";
 
+function postFatalWorkerError(kind, event) {
+  try {
+    const reason = kind === "unhandledrejection" ? event?.reason : event?.error;
+    self.postMessage({
+      type: "fatal",
+      payload: {
+        kind,
+        message: event?.message || reason?.message || String(reason || "Runtime worker failed."),
+        filename: event?.filename || "",
+        lineno: Number(event?.lineno || 0),
+        colno: Number(event?.colno || 0),
+        stack: reason?.stack || "",
+      },
+    });
+  } catch {
+    // Best-effort diagnostics only.
+  }
+}
+
+self.addEventListener?.("error", (event) => postFatalWorkerError("error", event));
+self.addEventListener?.("unhandledrejection", (event) => postFatalWorkerError("unhandledrejection", event));
+
 const DEFAULTS = {
   assetBaseUrl: "",
   runtimeAssetBaseUrl: "",
@@ -66,8 +88,10 @@ const DEFAULTS = {
   wasmCandidateHydrationConcurrency: 8,
   maxAssetBufferCacheEntries: 256,
   maxAssetBufferCacheBytes: 192 * 1024 * 1024,
-  prefetchNeighborKeyframes: 5,
-  keyframeTensorCacheMaxEntries: 128,
+  prefetchNeighborKeyframes: 200,
+  localNeighborhoodHotRadiusMeters: 8,
+  localNeighborhoodWarmRadiusMeters: 20,
+  keyframeTensorCacheMaxEntries: 200,
   precacheKeyframeTensorConcurrency: 8,
   precacheNeighborKeyframeTensors: false,
   webgpuPreflight: true,
@@ -95,7 +119,7 @@ const DEFAULTS = {
   webgpuForceFallbackAdapter: false,
   webgpuProfiling: false,
   lazyMapPack: true,
-  maxHydratedKeyframes: 96,
+  maxHydratedKeyframes: 200,
 };
 
 const RUNTIME_PROFILES = {
@@ -116,8 +140,8 @@ const RUNTIME_PROFILES = {
     webgpuCandidateHydrationConcurrency: 8,
     candidateHydrationConcurrency: 8,
     wasmCandidateHydrationConcurrency: 8,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -154,8 +178,8 @@ const RUNTIME_PROFILES = {
     webgpuCandidateHydrationConcurrency: 8,
     candidateHydrationConcurrency: 8,
     wasmCandidateHydrationConcurrency: 8,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
     xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_512_fixed.onnx",
@@ -199,8 +223,8 @@ const RUNTIME_PROFILES = {
     wasmCandidateHydrationConcurrency: 8,
     maxAssetBufferCacheEntries: 256,
     maxAssetBufferCacheBytes: 192 * 1024 * 1024,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
     xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_384_fixed.onnx",
@@ -238,8 +262,8 @@ const RUNTIME_PROFILES = {
     webgpuCandidateHydrationConcurrency: 8,
     candidateHydrationConcurrency: 8,
     wasmCandidateHydrationConcurrency: 8,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -277,8 +301,8 @@ const RUNTIME_PROFILES = {
     webgpuCandidateHydrationConcurrency: 8,
     candidateHydrationConcurrency: 8,
     wasmCandidateHydrationConcurrency: 8,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     webgpuPreflightTimeoutMs: 10000,
     webgpuSessionCreateTimeoutMs: 60000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -309,8 +333,8 @@ const RUNTIME_PROFILES = {
     deviceCpuCoreTarget: 8,
     candidateHydrationConcurrency: 8,
     wasmCandidateHydrationConcurrency: 8,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     maxModelSide: 640,
     maxQueryFeatures: 384,
     maxKeyframeFeatures: 384,
@@ -326,8 +350,8 @@ const RUNTIME_PROFILES = {
     deviceCpuCoreTarget: 8,
     candidateHydrationConcurrency: 8,
     wasmCandidateHydrationConcurrency: 8,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     maxModelSide: 640,
     maxQueryFeatures: 384,
     maxKeyframeFeatures: 384,
@@ -354,8 +378,8 @@ const RUNTIME_PROFILES = {
     webgpuCandidateHydrationConcurrency: 8,
     candidateHydrationConcurrency: 8,
     wasmCandidateHydrationConcurrency: 8,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     webgpuPreflightTimeoutMs: 8000,
     webgpuSessionCreateTimeoutMs: 45000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -398,8 +422,8 @@ const RUNTIME_PROFILES = {
     webgpuCandidateHydrationConcurrency: 8,
     candidateHydrationConcurrency: 8,
     wasmCandidateHydrationConcurrency: 8,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     webgpuPreflightTimeoutMs: 8000,
     webgpuSessionCreateTimeoutMs: 45000,
     webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
@@ -438,8 +462,8 @@ const RUNTIME_PROFILES = {
     wasmProxy: false,
     candidateHydrationConcurrency: 8,
     wasmCandidateHydrationConcurrency: 8,
-    maxHydratedKeyframes: 96,
-    prefetchNeighborKeyframes: 5,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
     maxModelSide: 640,
     maxQueryFeatures: 384,
     maxKeyframeFeatures: 384,
@@ -654,6 +678,8 @@ function runtimeDiagnostics() {
     keyframeTensorCacheMaxEntries: Number(state.options.keyframeTensorCacheMaxEntries || DEFAULTS.keyframeTensorCacheMaxEntries),
     keyframeTensorCacheStats: keyframeTensorCacheStats(),
     prefetchNeighborKeyframes: Number(state.options.prefetchNeighborKeyframes || DEFAULTS.prefetchNeighborKeyframes),
+    localNeighborhoodHotRadiusMeters: Number(state.options.localNeighborhoodHotRadiusMeters || DEFAULTS.localNeighborhoodHotRadiusMeters),
+    localNeighborhoodWarmRadiusMeters: Number(state.options.localNeighborhoodWarmRadiusMeters || DEFAULTS.localNeighborhoodWarmRadiusMeters),
     webgpuPowerPreference: state.options.webgpuPowerPreference || DEFAULTS.webgpuPowerPreference,
     webgpuAdapterPowerPreferences: normalizeList(
       state.options.webgpuAdapterPowerPreferences || DEFAULTS.webgpuAdapterPowerPreferences,
@@ -818,6 +844,9 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
     "maxAssetBufferCacheEntries",
     "maxAssetBufferCacheBytes",
     "prefetchNeighborKeyframes",
+    "localNeighborhoodHotRadiusMeters",
+    "localNeighborhoodWarmRadiusMeters",
+    "keyframeTensorCacheMaxEntries",
     "maxModelSide",
     "fixedInputWidth",
     "fixedInputHeight",
@@ -1580,6 +1609,7 @@ function keyframeMetadata(keyframe, sidecarBaseUrl, sidecar) {
     id: keyframe.id,
     frameIndex: finiteOrNull(keyframe.frameIndex),
     sourceFrameIndex: finiteOrNull(keyframe.sourceFrameIndex ?? keyframe.frameIndex),
+    posePosition: keyframePosePosition(keyframe, retrieval),
     retrieval,
     retrievalTags: Array.isArray(keyframe.retrievalTags) ? keyframe.retrievalTags : Array.isArray(retrieval.tokens) ? retrieval.tokens : [],
     width: Number(keyframe.width || sidecar.cameraModel?.width || 0),
@@ -1599,6 +1629,45 @@ function keyframeMetadata(keyframe, sidecarBaseUrl, sidecar) {
 
 function retrievalRowForKeyframe(sidecar, keyframeId) {
   return (sidecar.retrieval?.keyframes || []).find((row) => String(row.id) === String(keyframeId)) || null;
+}
+
+function keyframePosePosition(keyframe, retrieval = {}) {
+  const candidates = [
+    keyframe?.pose?.position,
+    keyframe?.posePosition,
+    keyframe?.cameraWorld,
+    keyframe?.world,
+    retrieval?.posePosition,
+    retrieval?.position,
+    retrieval?.cameraWorld,
+  ];
+  for (const value of candidates) {
+    const position = vector3From(value);
+    if (position) return position;
+  }
+  return null;
+}
+
+function vector3From(value) {
+  if (Array.isArray(value) && value.length >= 3) {
+    const out = value.slice(0, 3).map(Number);
+    return out.every(Number.isFinite) ? out : null;
+  }
+  if (value && typeof value === "object") {
+    const out = [value.x, value.y, value.z].map(Number);
+    return out.every(Number.isFinite) ? out : null;
+  }
+  return null;
+}
+
+function distance3(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length < 3 || b.length < 3) return Number.POSITIVE_INFINITY;
+  const dx = Number(a[0]) - Number(b[0]);
+  const dy = Number(a[1]) - Number(b[1]);
+  const dz = Number(a[2]) - Number(b[2]);
+  return Number.isFinite(dx) && Number.isFinite(dy) && Number.isFinite(dz)
+    ? Math.hypot(dx, dy, dz)
+    : Number.POSITIVE_INFINITY;
 }
 
 function covisibilityMap(sidecar) {
@@ -1767,7 +1836,8 @@ function scheduleKeyframePrefetch(keyframeId) {
   const neighbors = neighborKeyframeIds(keyframeId).slice(0, count);
   if (!neighbors.length) return;
   setTimeout(() => {
-    void mapWithConcurrency(neighbors, Math.min(3, neighbors.length), async (id) => {
+    const concurrency = Math.max(1, Math.min(Number(state.options.precacheKeyframeTensorConcurrency || DEFAULTS.precacheKeyframeTensorConcurrency), neighbors.length));
+    void mapWithConcurrency(neighbors, concurrency, async (id) => {
       const keyframe = state.keyframes.find((candidate) => String(candidate.id) === String(id));
       if (!keyframe || keyframe.hydrated || state.hydratedKeyframes.has(String(keyframe.id))) return null;
       try {
@@ -1784,10 +1854,14 @@ function scheduleKeyframePrefetch(keyframeId) {
 function neighborKeyframeIds(keyframeId) {
   const id = String(keyframeId);
   const selected = [];
+  const selectedSet = new Set();
   const add = (value) => {
     if (value == null) return;
     const normalized = String(value);
-    if (normalized && normalized !== id && !selected.includes(normalized)) selected.push(normalized);
+    if (normalized && normalized !== id && !selectedSet.has(normalized)) {
+      selected.push(normalized);
+      selectedSet.add(normalized);
+    }
   };
   const row = state.covisibilityByKeyframe.get(id);
   for (const key of ["neighbors", "neighborIds", "covisibleKeyframes", "overlapKeyframes", "trajectoryNeighbors"]) {
@@ -1802,6 +1876,21 @@ function neighborKeyframeIds(keyframeId) {
     if (Array.isArray(values)) {
       for (const value of values) add(typeof value === "object" ? value.id ?? value.keyframeId : value);
     }
+  }
+  const hotRadius = Number(state.options.localNeighborhoodHotRadiusMeters || DEFAULTS.localNeighborhoodHotRadiusMeters);
+  const warmRadius = Math.max(hotRadius, Number(state.options.localNeighborhoodWarmRadiusMeters || DEFAULTS.localNeighborhoodWarmRadiusMeters));
+  const center = keyframe?.posePosition || keyframePosePosition(keyframe, keyframe?.retrieval || {});
+  if (center && Number.isFinite(warmRadius) && warmRadius > 0) {
+    const spatial = state.keyframes
+      .map((candidate) => {
+        const distanceMeters = distance3(center, candidate.posePosition || keyframePosePosition(candidate, candidate.retrieval || {}));
+        return { id: String(candidate.id), distanceMeters };
+      })
+      .filter((candidate) => candidate.id !== id && Number.isFinite(candidate.distanceMeters) && candidate.distanceMeters <= warmRadius)
+      .sort((a, b) => a.distanceMeters - b.distanceMeters);
+    const hot = spatial.filter((candidate) => candidate.distanceMeters <= hotRadius);
+    const warm = spatial.filter((candidate) => candidate.distanceMeters > hotRadius);
+    for (const candidate of [...hot, ...warm]) add(candidate.id);
   }
   const index = state.keyframes.findIndex((candidate) => String(candidate.id) === id);
   if (index >= 0) {
@@ -1876,6 +1965,7 @@ async function hydrateKeyframe(keyframe, sidecarBaseUrl, sidecar) {
     validLandmarkCount,
     descriptorDim,
     retrieval: keyframe.retrieval || retrievalRowForKeyframe(sidecar, keyframe.id) || {},
+    posePosition: keyframePosePosition(keyframe, keyframe.retrieval || retrievalRowForKeyframe(sidecar, keyframe.id) || {}),
     descriptorCentroid: descriptorCentroid(descriptors, featureCount, descriptorDim),
     normalizedKeypoints,
     keypointTensor: new state.ort.Tensor("float32", normalizedKeypoints, [1, featureCount, 2]),
@@ -3107,6 +3197,12 @@ function shortlistKeyframes(query, options, frame = {}) {
   const lastNeighbors = state.lastAcceptedKeyframeId
     ? new Set((state.covisibilityByKeyframe.get(state.lastAcceptedKeyframeId)?.neighbors || []).map((neighbor) => String(neighbor.id)))
     : new Set();
+  const lastAcceptedKeyframe = state.lastAcceptedKeyframeId
+    ? state.keyframes.find((candidate) => String(candidate.id) === String(state.lastAcceptedKeyframeId))
+    : null;
+  const localCenter = lastAcceptedKeyframe?.posePosition || keyframePosePosition(lastAcceptedKeyframe, lastAcceptedKeyframe?.retrieval || {});
+  const hotRadius = Number(options.localNeighborhoodHotRadiusMeters || DEFAULTS.localNeighborhoodHotRadiusMeters);
+  const warmRadius = Math.max(hotRadius, Number(options.localNeighborhoodWarmRadiusMeters || DEFAULTS.localNeighborhoodWarmRadiusMeters));
   const ranked = state.keyframes
     .filter((keyframe) => !selected.includes(keyframe))
     .map((keyframe) => {
@@ -3115,16 +3211,27 @@ function shortlistKeyframes(query, options, frame = {}) {
         ? Math.abs(sourceFrame - keyframe.sourceFrameIndex)
         : null;
       const retrieval = keyframe.retrieval || {};
+      const localDistanceMeters = localCenter
+        ? distance3(localCenter, keyframe.posePosition || keyframePosePosition(keyframe, retrieval))
+        : Number.POSITIVE_INFINITY;
       const covisibilityBoost = lastNeighbors.has(String(keyframe.id)) ? -0.1 : 0;
       const trajectoryBoost = Array.isArray(retrieval.trajectoryNeighbors) && state.lastAcceptedKeyframeId && retrieval.trajectoryNeighbors.includes(state.lastAcceptedKeyframeId) ? -0.05 : 0;
       const qualityBoost = -0.03 * Number(retrieval.qualityScore || 0);
       const temporalPenalty = temporalDistance !== null ? Math.min(0.25, temporalDistance / 2400) : 0;
+      const localNeighborhoodBoost = Number.isFinite(localDistanceMeters)
+        ? localDistanceMeters <= hotRadius
+          ? -0.16
+          : localDistanceMeters <= warmRadius
+            ? -0.06
+            : Math.min(0.3, (localDistanceMeters - warmRadius) / Math.max(1, warmRadius) * 0.1)
+        : 0;
       return {
         keyframe,
         descriptorDistance,
         temporalDistance,
+        localDistanceMeters,
         score: Number.isFinite(descriptorDistance)
-          ? descriptorDistance + temporalPenalty + covisibilityBoost + trajectoryBoost + qualityBoost
+          ? descriptorDistance + temporalPenalty + covisibilityBoost + trajectoryBoost + qualityBoost + localNeighborhoodBoost
           : Number.POSITIVE_INFINITY,
       };
     });

@@ -121,6 +121,11 @@ export interface ScanSavvyRuntimeInitOptions {
   minMatches?: number;
   minInliers?: number;
   minConfidence?: number;
+  maxHydratedKeyframes?: number;
+  prefetchNeighborKeyframes?: number;
+  keyframeTensorCacheMaxEntries?: number;
+  localNeighborhoodHotRadiusMeters?: number;
+  localNeighborhoodWarmRadiusMeters?: number;
 }
 
 export interface LoadScanSavvyOpenCvOptions {

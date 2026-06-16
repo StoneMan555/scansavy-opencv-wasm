@@ -14,11 +14,18 @@
   },
   "onnxRuntime": {
     "version": "1.26.0",
-    "preferredProviders": ["webnn", "webgpu", "wasm"],
+    "preferredProviders": [
+      "webnn",
+      "webgpu",
+      "wasm"
+    ],
     "runtimeProfiles": {
       "phone-webgpu": {
         "description": "Default physical Android Chrome profile, tuned for the Samsung S23+ baseline: WebGPU first, 8-thread-cap ORT WASM fallback, and bounded parallel MapPack chunk hydration.",
-        "providers": ["webgpu", "wasm"],
+        "providers": [
+          "webgpu",
+          "wasm"
+        ],
         "deviceBaseline": "samsung-s23-plus",
         "deviceCpuCoreTarget": 8,
         "wasmNumThreads": 8,
@@ -36,14 +43,20 @@
         "webgpuCandidateHydrationConcurrency": 8,
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "webgpuPreflightTimeoutMs": 10000,
         "webgpuSessionCreateTimeoutMs": 60000,
-        "webgpuAdapterPowerPreferences": ["high-performance", "default", "low-power"],
-        "webgpuAdapterFeatureLevels": ["core"],
+        "webgpuAdapterPowerPreferences": [
+          "high-performance",
+          "default",
+          "low-power"
+        ],
+        "webgpuAdapterFeatureLevels": [
+          "core"
+        ],
         "webgpuTryFallbackAdapter": true,
         "candidateLimit": 2,
         "maxQueryFeatures": 512,
@@ -52,11 +65,18 @@
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
         "webgpuGraphCapture": false,
-        "webgpuUsePreflightDevice": false
+        "webgpuUsePreflightDevice": false,
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "phone-webnn-npu": {
         "description": "Physical Android Chrome NPU probe profile for S23+-class phones. Tries ONNX Runtime WebNN with deviceType=npu, then WebGPU, then 8-thread-cap WASM so the browser route can use native ML silicon when Chrome exposes it.",
-        "providers": ["webnn", "webgpu", "wasm"],
+        "providers": [
+          "webnn",
+          "webgpu",
+          "wasm"
+        ],
         "deviceBaseline": "samsung-s23-plus",
         "deviceCpuCoreTarget": 8,
         "wasmNumThreads": 8,
@@ -78,14 +98,20 @@
         "webgpuCandidateHydrationConcurrency": 8,
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "webgpuPreflightTimeoutMs": 10000,
         "webgpuSessionCreateTimeoutMs": 60000,
-        "webgpuAdapterPowerPreferences": ["high-performance", "default", "low-power"],
-        "webgpuAdapterFeatureLevels": ["core"],
+        "webgpuAdapterPowerPreferences": [
+          "high-performance",
+          "default",
+          "low-power"
+        ],
+        "webgpuAdapterFeatureLevels": [
+          "core"
+        ],
         "webgpuTryFallbackAdapter": true,
         "candidateLimit": 2,
         "fallbackCandidateLimit": 2,
@@ -102,11 +128,18 @@
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
         "webgpuGraphCapture": false,
-        "webgpuUsePreflightDevice": false
+        "webgpuUsePreflightDevice": false,
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "phone-s23-plus-max": {
         "description": "Aggressive physical Samsung S23+ profile. Tries WebNN/NPU first, then WebGPU, then an 8-thread WASM ceiling with wider MapPack hydration, cache, and prefetch budgets for phone-side relocalization stress tests.",
-        "providers": ["webnn", "webgpu", "wasm"],
+        "providers": [
+          "webnn",
+          "webgpu",
+          "wasm"
+        ],
         "deviceBaseline": "samsung-s23-plus-max",
         "deviceCpuCoreTarget": 8,
         "wasmNumThreads": 8,
@@ -128,14 +161,20 @@
         "webgpuCandidateHydrationConcurrency": 8,
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "webgpuPreflightTimeoutMs": 10000,
         "webgpuSessionCreateTimeoutMs": 60000,
-        "webgpuAdapterPowerPreferences": ["high-performance", "default", "low-power"],
-        "webgpuAdapterFeatureLevels": ["core"],
+        "webgpuAdapterPowerPreferences": [
+          "high-performance",
+          "default",
+          "low-power"
+        ],
+        "webgpuAdapterFeatureLevels": [
+          "core"
+        ],
         "webgpuTryFallbackAdapter": true,
         "candidateLimit": 1,
         "fallbackCandidateLimit": 2,
@@ -152,11 +191,17 @@
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
         "webgpuGraphCapture": false,
-        "webgpuUsePreflightDevice": false
+        "webgpuUsePreflightDevice": false,
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "phone-webgpu-fast": {
         "description": "Physical-phone speed profile for the Samsung S23+ baseline. Uses WebGPU, fixed-shape XFeat, 8-thread-cap ORT WASM fallback, candidateLimit=1, and v1 MapPack retrieval escalation when the top candidate is ambiguous.",
-        "providers": ["webgpu", "wasm"],
+        "providers": [
+          "webgpu",
+          "wasm"
+        ],
         "deviceBaseline": "samsung-s23-plus",
         "deviceCpuCoreTarget": 8,
         "wasmNumThreads": 8,
@@ -174,14 +219,20 @@
         "webgpuCandidateHydrationConcurrency": 8,
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "webgpuPreflightTimeoutMs": 10000,
         "webgpuSessionCreateTimeoutMs": 60000,
-        "webgpuAdapterPowerPreferences": ["high-performance", "default", "low-power"],
-        "webgpuAdapterFeatureLevels": ["core"],
+        "webgpuAdapterPowerPreferences": [
+          "high-performance",
+          "default",
+          "low-power"
+        ],
+        "webgpuAdapterFeatureLevels": [
+          "core"
+        ],
         "webgpuTryFallbackAdapter": true,
         "candidateLimit": 1,
         "fallbackCandidateLimit": 2,
@@ -198,11 +249,17 @@
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
         "webgpuGraphCapture": false,
-        "webgpuUsePreflightDevice": false
+        "webgpuUsePreflightDevice": false,
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "phone-webgpu-quality": {
         "description": "Physical-phone quality profile for the Samsung S23+ baseline. Uses WebGPU, fixed-shape XFeat, 8-thread-cap ORT WASM fallback, candidateLimit=2, and v1 retrieval/covisibility sidecars.",
-        "providers": ["webgpu", "wasm"],
+        "providers": [
+          "webgpu",
+          "wasm"
+        ],
         "deviceBaseline": "samsung-s23-plus",
         "deviceCpuCoreTarget": 8,
         "wasmNumThreads": 8,
@@ -220,14 +277,20 @@
         "webgpuCandidateHydrationConcurrency": 8,
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "webgpuPreflightTimeoutMs": 10000,
         "webgpuSessionCreateTimeoutMs": 60000,
-        "webgpuAdapterPowerPreferences": ["high-performance", "default", "low-power"],
-        "webgpuAdapterFeatureLevels": ["core"],
+        "webgpuAdapterPowerPreferences": [
+          "high-performance",
+          "default",
+          "low-power"
+        ],
+        "webgpuAdapterFeatureLevels": [
+          "core"
+        ],
         "webgpuTryFallbackAdapter": true,
         "candidateLimit": 2,
         "fallbackCandidateLimit": 2,
@@ -244,19 +307,24 @@
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
         "webgpuGraphCapture": false,
-        "webgpuUsePreflightDevice": false
+        "webgpuUsePreflightDevice": false,
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "phone-wasm": {
         "description": "Physical-phone fallback for S23+-class devices or browsers where WebGPU is disabled or unstable.",
-        "providers": ["wasm"],
+        "providers": [
+          "wasm"
+        ],
         "deviceBaseline": "samsung-s23-plus",
         "deviceCpuCoreTarget": 8,
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "wasmNumThreads": 8,
         "wasmAutoThreadMax": 8,
         "wasmAutoThreadDivisor": 1,
@@ -267,19 +335,24 @@
         "maxQueryFeatures": 384,
         "maxKeyframeFeatures": 384,
         "burstFrameOrder": "center-first",
-        "webgpuPreferredLayout": "NCHW"
+        "webgpuPreferredLayout": "NCHW",
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "phone-wasm-safe": {
         "description": "Physical-phone fallback when WebGPU is missing or unstable. Uses the S23+ 8-thread-cap ORT WASM baseline when cross-origin isolation allows it and v1 retrieval to keep LighterGlue bounded.",
-        "providers": ["wasm"],
+        "providers": [
+          "wasm"
+        ],
         "deviceBaseline": "samsung-s23-plus",
         "deviceCpuCoreTarget": 8,
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "wasmNumThreads": 8,
         "wasmAutoThreadMax": 8,
         "wasmAutoThreadDivisor": 1,
@@ -294,11 +367,17 @@
         "maxKeyframeFeatures": 384,
         "maxLighterGluePairsPerBurst": 2,
         "burstFrameOrder": "center-first",
-        "webgpuPreferredLayout": "NCHW"
+        "webgpuPreferredLayout": "NCHW",
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "emulator-safe": {
         "description": "Android emulator profile that intentionally mirrors the Samsung S23+ physical-phone baseline. Use this for realistic emulator evidence on the RTX workstation; it tries WebGPU first, then 8-thread-cap ORT WASM fallback.",
-        "providers": ["webgpu", "wasm"],
+        "providers": [
+          "webgpu",
+          "wasm"
+        ],
         "deviceBaseline": "samsung-s23-plus",
         "deviceCpuCoreTarget": 8,
         "wasmNumThreads": 8,
@@ -316,14 +395,21 @@
         "webgpuCandidateHydrationConcurrency": 8,
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "webgpuPreflightTimeoutMs": 8000,
         "webgpuSessionCreateTimeoutMs": 45000,
-        "webgpuAdapterPowerPreferences": ["high-performance", "default", "low-power"],
-        "webgpuAdapterFeatureLevels": ["core", "compatibility"],
+        "webgpuAdapterPowerPreferences": [
+          "high-performance",
+          "default",
+          "low-power"
+        ],
+        "webgpuAdapterFeatureLevels": [
+          "core",
+          "compatibility"
+        ],
         "webgpuTryFallbackAdapter": true,
         "candidateLimit": 2,
         "fallbackCandidateLimit": 2,
@@ -339,11 +425,18 @@
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
         "webgpuGraphCapture": false,
-        "webgpuUsePreflightDevice": false
+        "webgpuUsePreflightDevice": false,
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "emulator-webnn-gpu": {
         "description": "Android emulator WebNN acceleration probe. Requests ONNX Runtime WebNN with deviceType=gpu under Chrome WebNN flags, then falls back to WebGPU and the same S23+-shaped 8-thread-cap WASM lane.",
-        "providers": ["webnn", "webgpu", "wasm"],
+        "providers": [
+          "webnn",
+          "webgpu",
+          "wasm"
+        ],
         "deviceBaseline": "samsung-s23-plus-emulator-webnn-probe",
         "deviceCpuCoreTarget": 8,
         "wasmNumThreads": 8,
@@ -366,14 +459,21 @@
         "webgpuCandidateHydrationConcurrency": 8,
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "webgpuPreflightTimeoutMs": 8000,
         "webgpuSessionCreateTimeoutMs": 45000,
-        "webgpuAdapterPowerPreferences": ["high-performance", "default", "low-power"],
-        "webgpuAdapterFeatureLevels": ["core", "compatibility"],
+        "webgpuAdapterPowerPreferences": [
+          "high-performance",
+          "default",
+          "low-power"
+        ],
+        "webgpuAdapterFeatureLevels": [
+          "core",
+          "compatibility"
+        ],
         "webgpuTryFallbackAdapter": true,
         "candidateLimit": 1,
         "fallbackCandidateLimit": 2,
@@ -390,11 +490,16 @@
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
         "webgpuGraphCapture": false,
-        "webgpuUsePreflightDevice": false
+        "webgpuUsePreflightDevice": false,
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "emulator-conservative": {
         "description": "Legacy Android emulator route QA fallback. Uses single-thread ORT WASM for debugging browser/emulator instability only; do not use as the default performance proxy for the S23+ phone.",
-        "providers": ["wasm"],
+        "providers": [
+          "wasm"
+        ],
         "wasmNumThreads": 1,
         "requiresCrossOriginIsolationForThreadedWasm": false,
         "opencvBuildTarget": "geometry",
@@ -403,11 +508,18 @@
         "maxQueryFeatures": 384,
         "maxKeyframeFeatures": 384,
         "burstFrameOrder": "center-first",
-        "webgpuPreferredLayout": "NCHW"
+        "webgpuPreferredLayout": "NCHW",
+        "maxHydratedKeyframes": 200,
+        "prefetchNeighborKeyframes": 200,
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       },
       "wasm-fast": {
         "description": "Experimental browser WASM speed profile. Reduces query and keyframe feature caps and tries one candidate first.",
-        "providers": ["wasm"],
+        "providers": [
+          "wasm"
+        ],
         "wasmNumThreads": "auto",
         "wasmAutoThreadMax": 8,
         "wasmAutoThreadDivisor": 1,
@@ -416,15 +528,18 @@
         "opencvExecution": "wasm-simd",
         "candidateHydrationConcurrency": 8,
         "wasmCandidateHydrationConcurrency": 8,
-        "maxHydratedKeyframes": 96,
+        "maxHydratedKeyframes": 200,
         "maxAssetBufferCacheEntries": 256,
         "maxAssetBufferCacheBytes": 201326592,
-        "prefetchNeighborKeyframes": 5,
+        "prefetchNeighborKeyframes": 200,
         "candidateLimit": 1,
         "maxQueryFeatures": 384,
         "maxKeyframeFeatures": 384,
         "burstFrameOrder": "center-first",
-        "webgpuPreferredLayout": "NCHW"
+        "webgpuPreferredLayout": "NCHW",
+        "keyframeTensorCacheMaxEntries": 200,
+        "localNeighborhoodHotRadiusMeters": 8,
+        "localNeighborhoodWarmRadiusMeters": 20
       }
     },
     "assets": [
