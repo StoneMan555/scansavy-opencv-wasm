@@ -40,6 +40,9 @@ const DEFAULTS = {
   opencvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv-geometry.js",
   fallbackOpenCvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv.js",
   providers: ["webgpu", "wasm"],
+  xfeatProvider: "same",
+  lighterGlueProvider: "same",
+  fusedPairProvider: "same",
   onnxArchitecture: "split",
   maxModelSide: 640,
   fixedInputWidth: 0,
@@ -156,6 +159,7 @@ const RUNTIME_PROFILES = {
   },
   "phone-webnn-npu": {
     providers: ["webnn", "webgpu", "wasm"],
+    lighterGlueProvider: "wasm",
     wasmNumThreads: 8,
     webgpuWasmNumThreads: 8,
     wasmAutoThreadMax: 8,
@@ -199,6 +203,7 @@ const RUNTIME_PROFILES = {
   },
   "phone-s23-plus-max": {
     providers: ["webnn", "webgpu", "wasm"],
+    lighterGlueProvider: "wasm",
     wasmNumThreads: 8,
     webgpuWasmNumThreads: 8,
     wasmAutoThreadMax: 8,
@@ -477,6 +482,9 @@ const state = {
   ort: null,
   provider: null,
   activeProvider: null,
+  xfeatProvider: null,
+  lighterGlueProvider: null,
+  fusedPairProvider: null,
   xfeatSession: null,
   lighterGlueSession: null,
   fusedPairSession: null,
@@ -644,6 +652,9 @@ function runtimeDiagnostics() {
   return {
     runtimeProfile: state.options.runtimeProfile || state.options.profile || "phone-webgpu",
     provider: state.provider,
+    xfeatProvider: state.xfeatProvider || state.provider,
+    lighterGlueProvider: state.lighterGlueProvider || state.provider,
+    fusedPairProvider: state.fusedPairProvider || state.provider,
     providerAttempts: state.providerAttempts,
     adapterDiagnosticsVersion: RUNTIME_ADAPTER_DIAGNOSTICS_VERSION,
     crossOriginIsolated: Boolean(self.crossOriginIsolated),
@@ -847,6 +858,9 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
   const explicitOverrides = new Set(Array.isArray(overrideKeys) ? overrideKeys.map(String) : []);
   for (const key of [
     "providers",
+    "xfeatProvider",
+    "lighterGlueProvider",
+    "fusedPairProvider",
     "onnxArchitecture",
     "wasmNumThreads",
     "webgpuWasmNumThreads",
@@ -986,51 +1000,71 @@ async function createSessions(providers) {
         configureOrtWebGpu(state.ort, state.options);
       }
       loadOrtScript(provider, state.options);
+      state.ort = getOrtGlobal() || state.ort;
       const sessionStarted = performance.now();
       const sessionOptions = sessionOptionsFor(provider, state.options);
       const sessionTimeoutMs = sessionTimeoutForProvider(provider, state.options);
       state.xfeatSession = null;
       state.lighterGlueSession = null;
       state.fusedPairSession = null;
+      state.xfeatProvider = null;
+      state.lighterGlueProvider = null;
+      state.fusedPairProvider = null;
+      const xfeatProvider = providerForModel("xfeat", provider, state.options);
+      const lighterGlueProvider = providerForModel("lighterglue", provider, state.options);
+      const fusedPairProvider = providerForModel("fused-pair", provider, state.options);
+      await prepareProviderForModel(xfeatProvider);
       setInitStage(`sessions:${provider}:xfeat:start`, {
         timeoutMs: sessionTimeoutMs,
         xfeatUrl: state.options.xfeatUrl || DEFAULTS.xfeatUrl,
+        xfeatProvider,
       });
       const xfeatSessionResult = await withTimeout(
-        createXFeatSession(sessionOptions),
-        sessionTimeoutMs,
-        `${provider} XFeat session creation`,
+        createXFeatSession(sessionOptionsFor(xfeatProvider, state.options)),
+        sessionTimeoutForProvider(xfeatProvider, state.options),
+        `${xfeatProvider} XFeat session creation`,
       );
       setInitStage(`sessions:${provider}:xfeat:ready`, {
         fallbackUsed: Boolean(xfeatSessionResult.fallbackUsed),
+        xfeatProvider,
       });
       state.xfeatSession = xfeatSessionResult.session;
+      state.xfeatProvider = xfeatProvider;
       const lighterGlueUrl = resolveUrl(state.options.lighterGlueUrl || DEFAULTS.lighterGlueUrl);
+      await prepareProviderForModel(lighterGlueProvider);
       setInitStage(`sessions:${provider}:lighterglue:start`, {
         lighterGlueUrl,
+        lighterGlueProvider,
       });
       const lighterGlueSessionResult = await withTimeout(
-        createOrtSessionFromUrl(lighterGlueUrl, sessionOptions, "LighterGlue model"),
-        sessionTimeoutMs,
-        `${provider} LighterGlue session creation`,
+        createOrtSessionFromUrl(lighterGlueUrl, sessionOptionsFor(lighterGlueProvider, state.options), "LighterGlue model"),
+        sessionTimeoutForProvider(lighterGlueProvider, state.options),
+        `${lighterGlueProvider} LighterGlue session creation`,
       );
       state.lighterGlueSession = lighterGlueSessionResult.session;
-      setInitStage(`sessions:${provider}:lighterglue:ready`);
+      state.lighterGlueProvider = lighterGlueProvider;
+      setInitStage(`sessions:${provider}:lighterglue:ready`, { lighterGlueProvider });
       if (usesFusedPairArchitecture(state.options)) {
+        await prepareProviderForModel(fusedPairProvider);
         const fusedPairUrl = resolveUrl(state.options.fusedPairUrl || DEFAULTS.fusedPairUrl);
-        setInitStage(`sessions:${provider}:fused-pair:start`, { fusedPairUrl });
+        setInitStage(`sessions:${provider}:fused-pair:start`, { fusedPairUrl, fusedPairProvider });
         const fusedPairSessionResult = await withTimeout(
-          createOrtSessionFromUrl(fusedPairUrl, sessionOptions, "Fused XFeat+LighterGlue image-pair model"),
-          sessionTimeoutMs,
-          `${provider} fused XFeat+LighterGlue session creation`,
+          createOrtSessionFromUrl(fusedPairUrl, sessionOptionsFor(fusedPairProvider, state.options), "Fused XFeat+LighterGlue image-pair model"),
+          sessionTimeoutForProvider(fusedPairProvider, state.options),
+          `${fusedPairProvider} fused XFeat+LighterGlue session creation`,
         );
         state.fusedPairSession = fusedPairSessionResult.session;
-        setInitStage(`sessions:${provider}:fused-pair:ready`);
+        state.fusedPairProvider = fusedPairProvider;
+        setInitStage(`sessions:${provider}:fused-pair:ready`, { fusedPairProvider });
       }
+      state.activeProvider = provider;
       state.provider = provider;
       attempts.push({
         provider,
         status: "ready",
+        xfeatProvider,
+        lighterGlueProvider,
+        fusedPairProvider: usesFusedPairArchitecture(state.options) ? fusedPairProvider : null,
         xfeatUrl: xfeatSessionResult.url,
         xfeatFallbackUsed: xfeatSessionResult.fallbackUsed,
         onnxArchitecture: normalizedOnnxArchitecture(state.options),
@@ -1067,8 +1101,69 @@ function sessionTimeoutForProvider(provider, options) {
   return Number(options.wasmSessionCreateTimeoutMs || DEFAULTS.wasmSessionCreateTimeoutMs);
 }
 
+function normalizeProviderName(value) {
+  const provider = String(value || "").trim().toLowerCase();
+  return provider === "webnn" || provider === "webgpu" || provider === "wasm" ? provider : "";
+}
+
+function providerForModel(model, primaryProvider, options) {
+  const key = model === "lighterglue"
+    ? "lighterGlueProvider"
+    : model === "fused-pair"
+      ? "fusedPairProvider"
+      : "xfeatProvider";
+  const requested = String(options?.[key] || "same").trim().toLowerCase();
+  if (!requested || requested === "same" || requested === "primary") return primaryProvider;
+  if (requested === "auto") {
+    return model === "lighterglue" && primaryProvider === "webnn" ? "wasm" : primaryProvider;
+  }
+  return normalizeProviderName(requested) || primaryProvider;
+}
+
+function activeProviderForModel(model) {
+  if (model === "lighterglue") return state.lighterGlueProvider || state.provider || state.activeProvider || "unknown";
+  if (model === "fused-pair") return state.fusedPairProvider || state.provider || state.activeProvider || "unknown";
+  return state.xfeatProvider || state.provider || state.activeProvider || "unknown";
+}
+
+async function prepareProviderForModel(provider) {
+  const normalizedProvider = normalizeProviderName(provider) || "wasm";
+  state.activeProvider = normalizedProvider;
+  if (normalizedProvider === "webgpu" && state.options.webgpuPreflight !== false && !state.webgpuPreflightDiagnostics) {
+    const webgpuPreflight = await withTimeout(
+      preflightWebGpu(state.options),
+      Number(state.options.webgpuPreflightTimeoutMs || DEFAULTS.webgpuPreflightTimeoutMs),
+      "WebGPU preflight",
+    );
+    if (webgpuPreflight?.diagnostics?.selectedRequestOptions?.forceFallbackAdapter) {
+      state.options.webgpuForceFallbackAdapter = true;
+    }
+    if (state.options.webgpuUsePreflightDevice !== false) {
+      await withTimeout(
+        createWebGpuPreflightDevice(webgpuPreflight),
+        Number(state.options.webgpuPreflightTimeoutMs || DEFAULTS.webgpuPreflightTimeoutMs),
+        "WebGPU preflight device creation",
+      );
+    }
+  }
+  if (normalizedProvider === "webnn" && state.options.webnnPreflight !== false && !state.webnnPreflightDiagnostics) {
+    await withTimeout(
+      preflightWebNn(state.options),
+      Number(state.options.webnnPreflightTimeoutMs || DEFAULTS.webnnPreflightTimeoutMs),
+      "WebNN preflight",
+    );
+  }
+  if (!state.ort?.InferenceSession) {
+    loadOrtScript(normalizedProvider, state.options);
+    state.ort = getOrtGlobal() || state.ort;
+  }
+  configureOrtWasmPaths(state.ort, { ...state.options, activeProvider: normalizedProvider });
+  configureOrtWebGpu(state.ort, state.options);
+}
+
 function inferenceTimeoutMs(model, options) {
-  if (state.provider === "webnn") return Number(options.webnnInferenceTimeoutMs || DEFAULTS.webnnInferenceTimeoutMs);
+  const provider = activeProviderForModel(model);
+  if (provider === "webnn") return Number(options.webnnInferenceTimeoutMs || DEFAULTS.webnnInferenceTimeoutMs);
   if (model === "fused-pair") return Number(options.fusedPairInferenceTimeoutMs || DEFAULTS.fusedPairInferenceTimeoutMs);
   if (model === "lighterglue") return Number(options.lighterGlueInferenceTimeoutMs || DEFAULTS.lighterGlueInferenceTimeoutMs);
   return Number(options.xfeatInferenceTimeoutMs || DEFAULTS.xfeatInferenceTimeoutMs);
@@ -2488,10 +2583,11 @@ function hydrationConcurrencyForProvider(provider, options) {
 async function runXFeat(imageData, options) {
   const started = performance.now();
   const frameIndex = imageData.frameIndex ?? imageData.runtimeIndex ?? null;
+  const provider = activeProviderForModel("xfeat");
   postProgress({
     kind: "model-run",
     stage: "xfeat:start",
-    provider: state.provider,
+    provider,
     frameIndex,
     width: imageData.width,
     height: imageData.height,
@@ -2505,7 +2601,7 @@ async function runXFeat(imageData, options) {
   const output = await withTimeout(
     state.xfeatSession.run({ [inputName]: input }),
     inferenceTimeoutMs("xfeat", options),
-    `XFeat ${state.provider || "unknown"} inference`,
+    `XFeat ${provider || "unknown"} inference`,
   );
   const inferenceElapsedMs = roundMs(performance.now() - inferenceStarted);
   const keypointsRaw = outputTensor(output, ["keypoints", "kpts", "mkpts"], 0);
@@ -2546,7 +2642,7 @@ async function runXFeat(imageData, options) {
   postProgress({
     kind: "model-run",
     stage: "xfeat:done",
-    provider: state.provider,
+    provider,
     frameIndex,
     detectedKeypoints: response.count,
     inferenceElapsedMs: response.inferenceElapsedMs,
@@ -2567,10 +2663,11 @@ async function runFusedImagePair(retrievalQuery, imageData, keyframe, options) {
     throw new Error("Fused XFeat+LighterGlue image-pair session is not ready.");
   }
   const started = performance.now();
+  const provider = activeProviderForModel("fused-pair");
   postProgress({
     kind: "model-run",
     stage: "fused-pair:start",
-    provider: state.provider,
+    provider,
     keyframeId: keyframe?.id || null,
     width: imageData.width,
     height: imageData.height,
@@ -2595,7 +2692,7 @@ async function runFusedImagePair(retrievalQuery, imageData, keyframe, options) {
   const output = await withTimeout(
     state.fusedPairSession.run(feeds),
     inferenceTimeoutMs("fused-pair", options),
-    `Fused XFeat+LighterGlue ${state.provider || "unknown"} inference`,
+    `Fused XFeat+LighterGlue ${provider || "unknown"} inference`,
   );
   const inferenceElapsedMs = roundMs(performance.now() - inferenceStarted);
   const keypoints0Raw = outputTensor(output, ["keypoints0", "kpts0", "mkpts0"], 0);
@@ -2660,7 +2757,7 @@ async function runFusedImagePair(retrievalQuery, imageData, keyframe, options) {
   postProgress({
     kind: "model-run",
     stage: "fused-pair:done",
-    provider: state.provider,
+    provider,
     keyframeId: keyframe?.id || null,
     rawMatchCount: rawPairs.length,
     geometryMatchCount: matches.length,
@@ -2672,13 +2769,14 @@ async function runFusedImagePair(retrievalQuery, imageData, keyframe, options) {
 
 async function runLighterGlue(query, keyframe, options) {
   const started = performance.now();
+  const provider = activeProviderForModel("lighterglue");
   const tensorStarted = performance.now();
   const keyframeTensorBundle = ensureKeyframeTensorBundle(keyframe, options);
   const keyframeTensorElapsedMs = roundMs(performance.now() - tensorStarted);
   postProgress({
     kind: "model-run",
     stage: "lighterglue:start",
-    provider: state.provider,
+    provider,
     keyframeId: keyframe?.id || null,
     queryFeatures: query.count,
     keyframeFeatures: keyframe.count,
@@ -2695,7 +2793,7 @@ async function runLighterGlue(query, keyframe, options) {
   const output = await withTimeout(
     state.lighterGlueSession.run(feeds),
     inferenceTimeoutMs("lighterglue", options),
-    `LighterGlue ${state.provider || "unknown"} inference`,
+    `LighterGlue ${provider || "unknown"} inference`,
   );
   const matchesRaw = outputTensor(output, ["matches", "matches0", "indices"], 0);
   const scoresRaw = outputTensor(output, ["scores", "mscores", "matching_scores"], 1, false);
@@ -2717,6 +2815,7 @@ async function runLighterGlue(query, keyframe, options) {
     geometryMatchCount: matches.length,
     candidateMode: "single-frame",
     matcherArchitecture: "split",
+    matcherProvider: provider,
     keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
     keyframeTensorCacheKey: keyframeTensorBundle.cacheKey,
     keyframeTensorElapsedMs,
@@ -2725,7 +2824,7 @@ async function runLighterGlue(query, keyframe, options) {
   postProgress({
     kind: "model-run",
     stage: "lighterglue:done",
-    provider: state.provider,
+    provider,
     keyframeId: keyframe?.id || null,
     matchCount: matches.length,
     keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,

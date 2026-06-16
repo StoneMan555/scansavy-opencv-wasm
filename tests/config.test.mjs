@@ -52,6 +52,8 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].providers, ["webnn", "webgpu", "wasm"]);
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].webnnDeviceType, "gpu");
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].providers, ["webnn", "webgpu", "wasm"]);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].lighterGlueProvider, "wasm");
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-webnn-npu"].lighterGlueProvider, "wasm");
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].wasmNumThreads, 8);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].webgpuWasmNumThreads, 8);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].candidateHydrationConcurrency, 8);

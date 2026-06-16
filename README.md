@@ -44,7 +44,7 @@ Static export hosts must add those headers outside Next.js. The ScanSavvy dev st
 | --- | --- | --- | --- |
 | `phone-webgpu` | Default physical Android Chrome test, tuned to the Samsung S23+ baseline | `webgpu`, then `wasm` | up to `8` when cross-origin isolated |
 | `phone-webnn-npu` | Physical Android Chrome NPU probe for S23+-class phones | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
-| `phone-s23-plus-max` | Aggressive physical S23+ stress profile for fastest browser-side path discovery | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
+| `phone-s23-plus-max` | Aggressive physical S23+ stress profile for fastest browser-side path discovery. XFeat can run on WebNN/NPU while LighterGlue defaults to WASM because Chrome WebNN currently times out on that matcher. | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
 | `phone-webgpu-fast` | Physical phone speed lane | `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
 | `phone-webgpu-quality` | Physical phone quality lane | `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
 | `phone-wasm-safe` | Physical phone fallback when WebGPU/WebNN are disabled or unstable | `wasm` | up to `8` when cross-origin isolated |
