@@ -112,6 +112,9 @@ export interface ScanSavvyRuntimeInitOptions {
   webnnDeviceType?: "cpu" | "gpu" | "npu";
   webnnPowerPreference?: "high-performance" | "low-power" | "default";
   webnnUseWebGpuDevice?: boolean;
+  webnnFreeDimensionOverrides?: boolean;
+  webnnLighterGlueFixedFeatureCount?: number;
+  lighterGlueFixedFeatureCount?: number;
   maxModelSide?: number;
   fixedInputWidth?: number;
   fixedInputHeight?: number;

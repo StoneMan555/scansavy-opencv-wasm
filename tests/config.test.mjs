@@ -53,6 +53,9 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.equal(config.onnxRuntime.runtimeProfiles["emulator-webnn-gpu"].webnnDeviceType, "gpu");
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].providers, ["webnn", "webgpu", "wasm"]);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].lighterGlueProvider, "wasm");
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-webnn-lg"].lighterGlueProvider, "webnn");
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-webnn-lg"].lighterGlueFixedFeatureCount, 384);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-webnn-lg"].webnnFreeDimensionOverrides, true);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-webnn-npu"].lighterGlueProvider, "wasm");
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].wasmNumThreads, 8);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].webgpuWasmNumThreads, 8);
@@ -88,6 +91,9 @@ test("High-quality runtime worker exposes XFeat/LighterGlue and projection messa
     "createWebGpuPreflightDevice",
     "inferXFeatInputShape",
     "runFusedImagePair",
+    "freeDimensionOverridesFor",
+    "lighterGlueFixedFeatureCountFor",
+    "ensureQueryTensorBundle",
     'value === "fused-pair"',
     "webgpu-adapter-sweep-v2",
   ]) {

@@ -44,7 +44,8 @@ Static export hosts must add those headers outside Next.js. The ScanSavvy dev st
 | --- | --- | --- | --- |
 | `phone-webgpu` | Default physical Android Chrome test, tuned to the Samsung S23+ baseline | `webgpu`, then `wasm` | up to `8` when cross-origin isolated |
 | `phone-webnn-npu` | Physical Android Chrome NPU probe for S23+-class phones | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
-| `phone-s23-plus-max` | Aggressive physical S23+ stress profile for fastest browser-side path discovery. XFeat can run on WebNN/NPU while LighterGlue defaults to WASM because Chrome WebNN currently times out on that matcher. | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
+| `phone-s23-plus-max` | Aggressive physical S23+ stress profile for fastest browser-side path discovery. XFeat can run on WebNN/NPU while LighterGlue defaults to the stable WASM matcher. | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
+| `phone-s23-plus-webnn-lg` | Strict physical S23+ WebNN LighterGlue probe. XFeat and LighterGlue both use WebNN with fixed 384-keypoint matcher tensors and ONNX Runtime free-dimension overrides. | `webnn`, then `webgpu`, then `wasm` | up to `8` if a later provider is selected |
 | `phone-webgpu-fast` | Physical phone speed lane | `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
 | `phone-webgpu-quality` | Physical phone quality lane | `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
 | `phone-wasm-safe` | Physical phone fallback when WebGPU/WebNN are disabled or unstable | `wasm` | up to `8` when cross-origin isolated |
@@ -58,6 +59,8 @@ Static export hosts must add those headers outside Next.js. The ScanSavvy dev st
 The default local-neighborhood cache is intentionally robustness-first: an `8m` hot ring, a `20m` warm ring, `200` hydrated keyframes, and `200` cached keyframe tensor bundles. When MapPack keyframes expose `pose.position`/`retrieval.posePosition`, the worker uses those meter-scale rings to keep likely next keyframes warm after each accepted pose. When a sidecar lacks positions, it falls back to covisibility, trajectory, and nearby sequence neighbors.
 
 `phone-webnn-npu` is intentionally a physical-device probe. Android emulators may expose `navigator.gpu` without a usable adapter and generally do not expose `navigator.ml.createContext`; in that case the worker records the failed provider attempts and falls back to the same WASM lane. `emulator-webnn-gpu` exists only to test whether an emulator Chrome build exposes WebNN when started with WebNN feature flags. Treat a fallback result as useful evidence, not a failure of the relocalizer.
+
+`phone-s23-plus-webnn-lg` is the strict LighterGlue-on-WebNN experiment. LighterGlue's ONNX graph has symbolic `num_keypoints0` and `num_keypoints1` inputs, so this profile fixes both dimensions at `384`, pads/truncates query and MapPack keyframe tensors to that shape, and passes ONNX Runtime `freeDimensionOverrides` during WebNN session creation. Keep this separate from `phone-s23-plus-max` until physical-phone evidence shows the strict WebNN matcher is faster and stable.
 
 The WebGPU preflight now sweeps adapter request variants and reports the exact failure point. Phone profiles try the normal high-performance core adapter first. Emulator profiles also try compatibility-level and fallback adapter requests so ScanSavvy can distinguish "Chrome exposes `navigator.gpu`" from "Chrome can actually return a usable adapter for ONNX Runtime WebGPU." The WebNN probe can optionally request a WebNN context through a WebGPU device for diagnosing future WebNN/WebGPU interop.
 

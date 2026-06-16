@@ -56,6 +56,9 @@ const DEFAULTS = {
   adaptiveCandidateEscalation: true,
   retrievalConfidenceThreshold: 0.12,
   lighterGlueScoreThreshold: 0.2,
+  lighterGlueFixedFeatureCount: 0,
+  webnnLighterGlueFixedFeatureCount: 384,
+  webnnFreeDimensionOverrides: true,
   fusedPairScoreThreshold: 0,
   fusedPairKeyframeMaxLinkDistancePx: 10,
   minMatches: 8,
@@ -245,6 +248,58 @@ const RUNTIME_PROFILES = {
     maxLighterGluePairsPerBurst: 2,
     adaptiveCandidateEscalation: true,
     burstFrameOrder: "center-first",
+    webgpuPowerPreference: "high-performance",
+    webgpuPreferredLayout: "NCHW",
+    webgpuGraphCapture: false,
+    webgpuUsePreflightDevice: false,
+  },
+  "phone-s23-plus-webnn-lg": {
+    providers: ["webnn", "webgpu", "wasm"],
+    lighterGlueProvider: "webnn",
+    wasmNumThreads: 8,
+    webgpuWasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
+    wasmAutoThreadDivisor: 1,
+    wasmProxy: false,
+    deviceBaseline: "samsung-s23-plus-max-webnn-lighterglue",
+    deviceCpuCoreTarget: 8,
+    webnnDeviceType: "npu",
+    webnnPowerPreference: "high-performance",
+    webnnPreflightTimeoutMs: 10000,
+    webnnSessionCreateTimeoutMs: 60000,
+    webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+    webgpuAdapterFeatureLevels: ["core"],
+    webgpuTryFallbackAdapter: true,
+    webgpuBurstFrameConcurrency: 4,
+    parallelBurstExtraction: false,
+    burstFrameExtractionConcurrency: 4,
+    parallelBurstFrameLimit: 5,
+    parallelBurstCandidatesPerFrame: 1,
+    webgpuCandidateHydrationConcurrency: 8,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxAssetBufferCacheEntries: 256,
+    maxAssetBufferCacheBytes: 192 * 1024 * 1024,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
+    webgpuPreflightTimeoutMs: 10000,
+    webgpuSessionCreateTimeoutMs: 60000,
+    xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_384_fixed.onnx",
+    fallbackXFeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
+    maxModelSide: 640,
+    fixedInputWidth: 640,
+    fixedInputHeight: 640,
+    maxQueryFeatures: 384,
+    maxKeyframeFeatures: 384,
+    candidateLimit: 1,
+    fallbackCandidateLimit: 2,
+    maxCandidateLimit: 4,
+    maxLighterGluePairsPerBurst: 1,
+    adaptiveCandidateEscalation: true,
+    burstFrameOrder: "center-first",
+    lighterGlueFixedFeatureCount: 384,
+    webnnLighterGlueFixedFeatureCount: 384,
+    webnnFreeDimensionOverrides: true,
     webgpuPowerPreference: "high-performance",
     webgpuPreferredLayout: "NCHW",
     webgpuGraphCapture: false,
@@ -678,6 +733,10 @@ function runtimeDiagnostics() {
     fixedInputHeight: Number(state.options.fixedInputHeight || 0),
     maxQueryFeatures: Number(state.options.maxQueryFeatures || state.options.topK || DEFAULTS.maxQueryFeatures),
     maxKeyframeFeatures: Number(state.options.maxKeyframeFeatures || 0),
+    lighterGlueFixedFeatureCount: Number(state.options.lighterGlueFixedFeatureCount || DEFAULTS.lighterGlueFixedFeatureCount),
+    webnnLighterGlueFixedFeatureCount: Number(state.options.webnnLighterGlueFixedFeatureCount || DEFAULTS.webnnLighterGlueFixedFeatureCount),
+    activeLighterGlueFixedFeatureCount: lighterGlueFixedFeatureCountFor(activeProviderForModel("lighterglue"), state.options),
+    webnnFreeDimensionOverrides: state.options.webnnFreeDimensionOverrides !== false,
     candidateLimit: Number(state.options.candidateLimit || DEFAULTS.candidateLimit),
     fallbackCandidateLimit: Number(state.options.fallbackCandidateLimit || DEFAULTS.fallbackCandidateLimit),
     maxCandidateLimit: Number(state.options.maxCandidateLimit || DEFAULTS.maxCandidateLimit),
@@ -1002,7 +1061,7 @@ async function createSessions(providers) {
       loadOrtScript(provider, state.options);
       state.ort = getOrtGlobal() || state.ort;
       const sessionStarted = performance.now();
-      const sessionOptions = sessionOptionsFor(provider, state.options);
+      const sessionOptions = sessionOptionsFor(provider, state.options, "primary");
       const sessionTimeoutMs = sessionTimeoutForProvider(provider, state.options);
       state.xfeatSession = null;
       state.lighterGlueSession = null;
@@ -1020,7 +1079,7 @@ async function createSessions(providers) {
         xfeatProvider,
       });
       const xfeatSessionResult = await withTimeout(
-        createXFeatSession(sessionOptionsFor(xfeatProvider, state.options)),
+        createXFeatSession(sessionOptionsFor(xfeatProvider, state.options, "xfeat")),
         sessionTimeoutForProvider(xfeatProvider, state.options),
         `${xfeatProvider} XFeat session creation`,
       );
@@ -1037,7 +1096,7 @@ async function createSessions(providers) {
         lighterGlueProvider,
       });
       const lighterGlueSessionResult = await withTimeout(
-        createOrtSessionFromUrl(lighterGlueUrl, sessionOptionsFor(lighterGlueProvider, state.options), "LighterGlue model"),
+        createOrtSessionFromUrl(lighterGlueUrl, sessionOptionsFor(lighterGlueProvider, state.options, "lighterglue"), "LighterGlue model"),
         sessionTimeoutForProvider(lighterGlueProvider, state.options),
         `${lighterGlueProvider} LighterGlue session creation`,
       );
@@ -1049,7 +1108,7 @@ async function createSessions(providers) {
         const fusedPairUrl = resolveUrl(state.options.fusedPairUrl || DEFAULTS.fusedPairUrl);
         setInitStage(`sessions:${provider}:fused-pair:start`, { fusedPairUrl, fusedPairProvider });
         const fusedPairSessionResult = await withTimeout(
-          createOrtSessionFromUrl(fusedPairUrl, sessionOptionsFor(fusedPairProvider, state.options), "Fused XFeat+LighterGlue image-pair model"),
+          createOrtSessionFromUrl(fusedPairUrl, sessionOptionsFor(fusedPairProvider, state.options, "fused-pair"), "Fused XFeat+LighterGlue image-pair model"),
           sessionTimeoutForProvider(fusedPairProvider, state.options),
           `${fusedPairProvider} fused XFeat+LighterGlue session creation`,
         );
@@ -1579,7 +1638,7 @@ function configureOrtWebGpu(runtime, options) {
   }
 }
 
-function sessionOptionsFor(provider, options) {
+function sessionOptionsFor(provider, options, model = "primary") {
   const executionProvider = executionProviderFor(provider, options);
   const requestedGraphOptimizationLevel = String(options.graphOptimizationLevel || "auto").toLowerCase();
   const graphOptimizationLevel =
@@ -1595,6 +1654,10 @@ function sessionOptionsFor(provider, options) {
     enableCpuMemArena: true,
     enableMemPattern: provider !== "webgpu",
   };
+  const freeDimensionOverrides = freeDimensionOverridesFor(provider, model, options);
+  if (freeDimensionOverrides) {
+    sessionOptions.freeDimensionOverrides = freeDimensionOverrides;
+  }
   const graphCaptureSafe =
     provider === "webgpu" &&
     options.webgpuGraphCapture &&
@@ -1603,6 +1666,27 @@ function sessionOptionsFor(provider, options) {
     sessionOptions.enableGraphCapture = true;
   }
   return sessionOptions;
+}
+
+function freeDimensionOverridesFor(provider, model, options = {}) {
+  if (provider !== "webnn" || model !== "lighterglue" || options.webnnFreeDimensionOverrides === false) return null;
+  const featureCount = lighterGlueFixedFeatureCountFor(provider, options);
+  if (!featureCount) return null;
+  return {
+    num_keypoints0: featureCount,
+    num_keypoints1: featureCount,
+  };
+}
+
+function lighterGlueFixedFeatureCountFor(provider, options = {}) {
+  const explicit = Number(options.lighterGlueFixedFeatureCount || 0);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.max(1, Math.floor(explicit));
+  if (provider !== "webnn") return 0;
+  const webnnExplicit = Number(options.webnnLighterGlueFixedFeatureCount || DEFAULTS.webnnLighterGlueFixedFeatureCount || 0);
+  if (Number.isFinite(webnnExplicit) && webnnExplicit > 0) return Math.max(1, Math.floor(webnnExplicit));
+  const maxQuery = Number(options.maxQueryFeatures || options.topK || DEFAULTS.maxQueryFeatures || 384);
+  const maxKeyframe = Number(options.maxKeyframeFeatures || maxQuery);
+  return Math.max(1, Math.floor(Math.min(maxQuery || 384, maxKeyframe || maxQuery || 384)));
 }
 
 function executionProviderFor(provider, options) {
@@ -1874,12 +1958,13 @@ function keyframeTensorCacheStats() {
 }
 
 function keyframeTensorCacheKey(keyframe, options = {}) {
-  const provider = state.provider || state.activeProvider || "unknown";
+  const provider = activeProviderForModel("lighterglue") || state.provider || state.activeProvider || "unknown";
   const profile = options.runtimeProfile || options.profile || state.options.runtimeProfile || state.options.profile || "default";
   const architecture = normalizedOnnxArchitecture(options);
-  const count = Number(keyframe?.count || 0);
+  const fixedCount = lighterGlueFixedFeatureCountFor(provider, options);
+  const count = fixedCount || Number(keyframe?.count || 0);
   const dim = Number(keyframe?.descriptorDim || 64);
-  return [provider, profile, architecture, keyframe?.id || "unknown", count, dim].join("|");
+  return [provider, profile, architecture, keyframe?.id || "unknown", count, dim, fixedCount ? "fixed" : "dynamic"].join("|");
 }
 
 function ensureKeyframeTensorBundle(keyframe, options = {}) {
@@ -1891,30 +1976,83 @@ function ensureKeyframeTensorBundle(keyframe, options = {}) {
     return { ...cached, cacheHit: true, cacheKey };
   }
   state.keyframeTensorStats.misses += 1;
+  const provider = activeProviderForModel("lighterglue");
   const count = Number(keyframe.count || 0);
   const descriptorDim = Number(keyframe.descriptorDim || 64);
+  const fixedCount = lighterGlueFixedFeatureCountFor(provider, options);
+  const tensorCount = fixedCount || count;
+  const effectiveCount = fixedCount ? Math.min(count, fixedCount) : count;
+  const normalizedKeypoints = keyframe.normalizedKeypoints || normalizeKptsForGlue(keyframe.keypoints, keyframe.width || 0, keyframe.height || 0);
+  const keypointData = fixedCount
+    ? padOrTruncateFloat32(normalizedKeypoints, count, 2, tensorCount)
+    : normalizedKeypoints;
+  const descriptorData = fixedCount
+    ? padOrTruncateFloat32(keyframe.descriptors, count, descriptorDim, tensorCount)
+    : keyframe.descriptors;
   const bundle = {
-    keypointTensor: keyframe.keypointTensor || new state.ort.Tensor(
+    keypointTensor: (!fixedCount && keyframe.keypointTensor) || new state.ort.Tensor(
       "float32",
-      keyframe.normalizedKeypoints || normalizeKptsForGlue(keyframe.keypoints, keyframe.width || 0, keyframe.height || 0),
-      [1, count, 2],
+      keypointData,
+      [1, tensorCount, 2],
     ),
-    descriptorTensor: keyframe.descriptorTensor || new state.ort.Tensor(
+    descriptorTensor: (!fixedCount && keyframe.descriptorTensor) || new state.ort.Tensor(
       "float32",
-      keyframe.descriptors,
-      [1, count, descriptorDim],
+      descriptorData,
+      [1, tensorCount, descriptorDim],
     ),
     count,
+    effectiveCount,
+    tensorCount,
+    fixedCount,
     descriptorDim,
     createdAt: Date.now(),
   };
-  keyframe.keypointTensor = bundle.keypointTensor;
-  keyframe.descriptorTensor = bundle.descriptorTensor;
+  if (!fixedCount) {
+    keyframe.keypointTensor = bundle.keypointTensor;
+    keyframe.descriptorTensor = bundle.descriptorTensor;
+  }
   state.keyframeTensorStats.created += 1;
   state.keyframeTensorCache.set(cacheKey, bundle);
   state.keyframeTensorOrder.push(cacheKey);
   trimKeyframeTensorCache();
   return { ...bundle, cacheHit: false, cacheKey };
+}
+
+function ensureQueryTensorBundle(query, options = {}) {
+  const provider = activeProviderForModel("lighterglue");
+  const count = Number(query.count || 0);
+  const descriptorDim = Number(query.descriptorDim || 64);
+  const fixedCount = lighterGlueFixedFeatureCountFor(provider, options);
+  const tensorCount = fixedCount || count;
+  const effectiveCount = fixedCount ? Math.min(count, fixedCount) : count;
+  const normalizedKeypoints = normalizeKptsForGlue(query.keypoints, query.width, query.height);
+  const keypointData = fixedCount
+    ? padOrTruncateFloat32(normalizedKeypoints, count, 2, tensorCount)
+    : normalizedKeypoints;
+  const descriptorData = fixedCount
+    ? padOrTruncateFloat32(query.descriptors, count, descriptorDim, tensorCount)
+    : query.descriptors;
+  return {
+    keypointTensor: (!fixedCount && query.keypointTensor) || new state.ort.Tensor("float32", keypointData, [1, tensorCount, 2]),
+    descriptorTensor: (!fixedCount && query.descriptorTensor) || new state.ort.Tensor("float32", descriptorData, [1, tensorCount, descriptorDim]),
+    count,
+    effectiveCount,
+    tensorCount,
+    fixedCount,
+    descriptorDim,
+  };
+}
+
+function padOrTruncateFloat32(source, sourceCount, dim, targetCount) {
+  const safeSourceCount = Math.max(0, Number(sourceCount || 0));
+  const safeDim = Math.max(1, Number(dim || 1));
+  const safeTargetCount = Math.max(1, Number(targetCount || safeSourceCount || 1));
+  const output = new Float32Array(safeTargetCount * safeDim);
+  const copyLength = Math.min(safeSourceCount, safeTargetCount) * safeDim;
+  if (!source || copyLength <= 0) return output;
+  const typed = source instanceof Float32Array ? source : new Float32Array(source);
+  output.set(typed.subarray(0, Math.min(copyLength, typed.length)));
+  return output;
 }
 
 function touchKeyframeTensorCache(cacheKey) {
@@ -2771,6 +2909,7 @@ async function runLighterGlue(query, keyframe, options) {
   const started = performance.now();
   const provider = activeProviderForModel("lighterglue");
   const tensorStarted = performance.now();
+  const queryTensorBundle = ensureQueryTensorBundle(query, options);
   const keyframeTensorBundle = ensureKeyframeTensorBundle(keyframe, options);
   const keyframeTensorElapsedMs = roundMs(performance.now() - tensorStarted);
   postProgress({
@@ -2780,14 +2919,17 @@ async function runLighterGlue(query, keyframe, options) {
     keyframeId: keyframe?.id || null,
     queryFeatures: query.count,
     keyframeFeatures: keyframe.count,
+    queryTensorFeatures: queryTensorBundle.tensorCount,
+    keyframeTensorFeatures: keyframeTensorBundle.tensorCount,
+    fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
     keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
     keyframeTensorElapsedMs,
   });
   await flushProgress();
   const feeds = {
-    kpts0: query.keypointTensor || new state.ort.Tensor("float32", normalizeKptsForGlue(query.keypoints, query.width, query.height), [1, query.count, 2]),
+    kpts0: queryTensorBundle.keypointTensor,
     kpts1: keyframeTensorBundle.keypointTensor,
-    desc0: query.descriptorTensor || new state.ort.Tensor("float32", query.descriptors, [1, query.count, 64]),
+    desc0: queryTensorBundle.descriptorTensor,
     desc1: keyframeTensorBundle.descriptorTensor,
   };
   const output = await withTimeout(
@@ -2804,7 +2946,12 @@ async function runLighterGlue(query, keyframe, options) {
     if (score < threshold) continue;
     const queryIndex = Number(matchesRaw.data[i]);
     const mapIndex = Number(matchesRaw.data[i + 1]);
-    if (queryIndex < 0 || mapIndex < 0 || queryIndex >= query.count || mapIndex >= keyframe.count) continue;
+    if (
+      queryIndex < 0 ||
+      mapIndex < 0 ||
+      queryIndex >= queryTensorBundle.effectiveCount ||
+      mapIndex >= keyframeTensorBundle.effectiveCount
+    ) continue;
     matches.push({ queryIndex, mapIndex, score });
   }
   const response = {
@@ -2816,6 +2963,9 @@ async function runLighterGlue(query, keyframe, options) {
     candidateMode: "single-frame",
     matcherArchitecture: "split",
     matcherProvider: provider,
+    queryTensorFeatures: queryTensorBundle.tensorCount,
+    keyframeTensorFeatures: keyframeTensorBundle.tensorCount,
+    fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
     keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
     keyframeTensorCacheKey: keyframeTensorBundle.cacheKey,
     keyframeTensorElapsedMs,
@@ -2827,6 +2977,9 @@ async function runLighterGlue(query, keyframe, options) {
     provider,
     keyframeId: keyframe?.id || null,
     matchCount: matches.length,
+    queryTensorFeatures: queryTensorBundle.tensorCount,
+    keyframeTensorFeatures: keyframeTensorBundle.tensorCount,
+    fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
     keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
     keyframeTensorElapsedMs,
     elapsedMs: response.elapsedMs,
