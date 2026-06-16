@@ -104,7 +104,7 @@ const DEFAULTS = {
   xfeatInferenceTimeoutMs: 30000,
   lighterGlueInferenceTimeoutMs: 30000,
   fusedPairInferenceTimeoutMs: 30000,
-  webnnInferenceTimeoutMs: 8000,
+  webnnInferenceTimeoutMs: 45000,
   webgpuPowerPreference: "high-performance",
   webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
   webgpuAdapterFeatureLevels: ["core", "compatibility"],
@@ -520,6 +520,8 @@ const state = {
   initTimings: [],
   initError: null,
   lastInitRequest: null,
+  runtimeNeedsReset: false,
+  runtimeResetReason: null,
 };
 
 self.onmessage = async (event) => {
@@ -561,6 +563,10 @@ self.onmessage = async (event) => {
     }
     reply(id, type || "unknown", { status: "failed", error: `Unknown message type: ${type}` });
   } catch (error) {
+    if (type === "localizeBurst" && isRecoverableOnnxSessionError(error)) {
+      state.runtimeNeedsReset = true;
+      state.runtimeResetReason = String(error?.message || error);
+    }
     if (type === "init") {
       state.initError = String(error?.message || error);
       setInitStage("failed", { error: state.initError });
@@ -570,10 +576,19 @@ self.onmessage = async (event) => {
       error: String(error?.message || error),
       stack: error?.stack || null,
       providerAttempts: error?.providerAttempts || null,
+      runtimeNeedsReset: state.runtimeNeedsReset,
+      runtimeResetReason: state.runtimeResetReason,
       runtimeDiagnostics: runtimeDiagnostics(),
     });
   }
 };
+
+function isRecoverableOnnxSessionError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return message.includes("session already started")
+    || message.includes("inference timed out")
+    || message.includes("timed out after");
+}
 
 function reply(id, type, payload) {
   self.postMessage({ id, type, payload });
@@ -641,6 +656,8 @@ function runtimeDiagnostics() {
     initTimings: state.initTimings,
     initError: state.initError,
     lastInitRequest: state.lastInitRequest,
+    runtimeNeedsReset: Boolean(state.runtimeNeedsReset),
+    runtimeResetReason: state.runtimeResetReason,
     maxModelSide: Number(state.options.maxModelSide || DEFAULTS.maxModelSide),
     onnxArchitecture: normalizedOnnxArchitecture(state.options),
     xfeatUrl: state.options.xfeatUrl || DEFAULTS.xfeatUrl,
@@ -723,6 +740,8 @@ async function initRuntime(payload) {
   state.initStageUpdatedAt = started;
   state.initTimings = [];
   state.initError = null;
+  state.runtimeNeedsReset = false;
+  state.runtimeResetReason = null;
   setInitStage("start");
   const requestedOptions = payload.options || payload;
   state.lastInitRequest = {
@@ -1976,6 +1995,20 @@ async function hydrateKeyframe(keyframe, sidecarBaseUrl, sidecar) {
 
 async function localizeBurst(payload) {
   requireReady();
+  if (state.runtimeNeedsReset) {
+    return {
+      status: "failed",
+      descriptorMode: state.sidecar?.descriptorMode,
+      provider: state.provider,
+      runtimeDiagnostics: runtimeDiagnostics(),
+      frameCount: Array.isArray(payload.frames) ? payload.frames.length : 0,
+      processedFrameCount: 0,
+      lighterGluePairsTried: 0,
+      elapsedMs: 0,
+      reason: state.runtimeResetReason || "Runtime needs reset after a previous ONNX session error.",
+      error: state.runtimeResetReason || "Runtime needs reset after a previous ONNX session error.",
+    };
+  }
   const started = performance.now();
   const frames = payload.frames || [];
   const options = { ...state.options, ...(payload.options || {}) };
