@@ -119,6 +119,7 @@ const DEFAULTS = {
   webgpuAdapterFeatureLevels: ["core", "compatibility"],
   webgpuTryFallbackAdapter: true,
   webnnDeviceType: "npu",
+  webnnDeviceTypeCandidates: ["npu", "gpu", "cpu"],
   webnnPowerPreference: "high-performance",
   webnnUseWebGpuDevice: false,
   webgpuPreferredLayout: "NCHW",
@@ -310,6 +311,65 @@ const RUNTIME_PROFILES = {
     webgpuPreferredLayout: "NCHW",
     webgpuGraphCapture: false,
     webgpuUsePreflightDevice: false,
+  },
+  "phone-s23-plus-webnn-lg-256": {
+    providers: ["webnn"],
+    lighterGlueProvider: "webnn",
+    wasmNumThreads: 8,
+    webgpuWasmNumThreads: 8,
+    wasmAutoThreadMax: 8,
+    wasmAutoThreadDivisor: 1,
+    wasmProxy: false,
+    deviceBaseline: "samsung-s23-plus-webnn-lighterglue-256",
+    deviceCpuCoreTarget: 8,
+    webnnDeviceType: "auto",
+    webnnDeviceTypeCandidates: ["npu", "gpu", "cpu"],
+    webnnPowerPreference: "high-performance",
+    webnnPreflightTimeoutMs: 10000,
+    webnnSessionCreateTimeoutMs: 60000,
+    webgpuBurstFrameConcurrency: 4,
+    parallelBurstExtraction: false,
+    burstFrameExtractionConcurrency: 4,
+    parallelBurstFrameLimit: 5,
+    parallelBurstCandidatesPerFrame: 1,
+    webgpuCandidateHydrationConcurrency: 8,
+    candidateHydrationConcurrency: 8,
+    wasmCandidateHydrationConcurrency: 8,
+    maxAssetBufferCacheEntries: 256,
+    maxAssetBufferCacheBytes: 192 * 1024 * 1024,
+    maxHydratedKeyframes: 200,
+    prefetchNeighborKeyframes: 200,
+    webgpuPreflightTimeoutMs: 10000,
+    webgpuSessionCreateTimeoutMs: 60000,
+    webgpuAdapterPowerPreferences: ["high-performance", "default", "low-power"],
+    webgpuAdapterFeatureLevels: ["core"],
+    webgpuTryFallbackAdapter: true,
+    xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_384_fixed.onnx",
+    fallbackXFeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
+    maxModelSide: 640,
+    fixedInputWidth: 640,
+    fixedInputHeight: 640,
+    maxQueryFeatures: 256,
+    maxKeyframeFeatures: 256,
+    candidateLimit: 1,
+    fallbackCandidateLimit: 2,
+    maxCandidateLimit: 4,
+    maxLighterGluePairsPerBurst: 1,
+    adaptiveCandidateEscalation: true,
+    burstFrameOrder: "center-first",
+    lighterGlueFixedFeatureCount: 256,
+    lighterGlueWebNnCore: true,
+    lighterGlueCoreUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_core_256.onnx",
+    lighterGlueCoreFixedFeatureCount: 256,
+    webnnLighterGlueFixedFeatureCount: 256,
+    webnnFreeDimensionOverrides: true,
+    webgpuPowerPreference: "high-performance",
+    webgpuPreferredLayout: "NCHW",
+    webgpuGraphCapture: false,
+    webgpuUsePreflightDevice: false,
+    keyframeTensorCacheMaxEntries: 200,
+    localNeighborhoodHotRadiusMeters: 8,
+    localNeighborhoodWarmRadiusMeters: 20,
   },
   "phone-webgpu-fast": {
     providers: ["webgpu", "wasm"],
@@ -566,6 +626,9 @@ const state = {
   webgpuDeviceLabel: "",
   webgpuDeviceLostReason: null,
   webnnPreflightDiagnostics: null,
+  selectedWebNnDeviceType: null,
+  lastLighterGlueStart: null,
+  lastLighterGlueFailure: null,
   warmedUp: false,
   warmupSummary: null,
   assetBufferCache: new Map(),
@@ -789,9 +852,13 @@ function runtimeDiagnostics() {
     webgpuTryFallbackAdapter: state.options.webgpuTryFallbackAdapter !== false,
     webgpuPreflightDiagnostics: state.webgpuPreflightDiagnostics,
     webnnDeviceType: state.options.webnnDeviceType || DEFAULTS.webnnDeviceType,
+    selectedWebNnDeviceType: state.selectedWebNnDeviceType,
+    webnnDeviceTypeCandidates: normalizeWebNnDeviceTypeCandidates(state.options),
     webnnPowerPreference: state.options.webnnPowerPreference || DEFAULTS.webnnPowerPreference,
     webnnUseWebGpuDevice: Boolean(state.options.webnnUseWebGpuDevice),
     webnnPreflightDiagnostics: state.webnnPreflightDiagnostics,
+    lastLighterGlueStart: state.lastLighterGlueStart,
+    lastLighterGlueFailure: state.lastLighterGlueFailure,
     webgpuPreferredLayout: state.options.webgpuPreferredLayout || DEFAULTS.webgpuPreferredLayout,
     webgpuGraphCapture: Boolean(state.options.webgpuGraphCapture),
     webgpuUsePreflightDevice: Boolean(state.options.webgpuUsePreflightDevice),
@@ -824,6 +891,9 @@ async function initRuntime(payload) {
   state.initError = null;
   state.runtimeNeedsReset = false;
   state.runtimeResetReason = null;
+  state.selectedWebNnDeviceType = null;
+  state.lastLighterGlueStart = null;
+  state.lastLighterGlueFailure = null;
   setInitStage("start");
   const requestedOptions = payload.options || payload;
   state.lastInitRequest = {
@@ -984,6 +1054,7 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
     "webgpuAdapterFeatureLevels",
     "webgpuTryFallbackAdapter",
     "webnnDeviceType",
+    "webnnDeviceTypeCandidates",
     "webnnPowerPreference",
     "webnnUseWebGpuDevice",
     "webgpuPreferredLayout",
@@ -1419,6 +1490,7 @@ function disposeWebGpuDevice() {
 
 async function preflightWebNn(options) {
   state.webnnPreflightDiagnostics = null;
+  state.selectedWebNnDeviceType = null;
   const ml = self.navigator?.ml;
   if (!ml?.createContext) {
     state.webnnPreflightDiagnostics = {
@@ -1428,13 +1500,13 @@ async function preflightWebNn(options) {
     };
     throw new Error("WebNN preflight failed: navigator.ml.createContext is unavailable.");
   }
-  const contextOptions = {
-    deviceType: options.webnnDeviceType || DEFAULTS.webnnDeviceType,
-    powerPreference: options.webnnPowerPreference || DEFAULTS.webnnPowerPreference,
-  };
   let context;
   let bridgeDiagnostics = null;
   if (options.webnnUseWebGpuDevice) {
+    const contextOptions = {
+      deviceType: resolveRequestedWebNnDeviceType(options),
+      powerPreference: options.webnnPowerPreference || DEFAULTS.webnnPowerPreference,
+    };
     const adapterResult = await requestWebGpuAdapter(options);
     bridgeDiagnostics = adapterResult.diagnostics;
     if (!adapterResult.adapter?.requestDevice) {
@@ -1448,26 +1520,113 @@ async function preflightWebNn(options) {
     }
     const device = await adapterResult.adapter.requestDevice();
     context = await ml.createContext(device);
-  } else {
-    context = await ml.createContext(contextOptions);
+    if (!context) {
+      state.webnnPreflightDiagnostics = {
+        status: "failed",
+        reason: "no-context-returned",
+        contextOptions,
+        webgpuBridge: bridgeDiagnostics,
+      };
+      throw new Error("WebNN preflight failed: no ML context returned.");
+    }
+    state.selectedWebNnDeviceType = contextOptions.deviceType;
+    state.webnnPreflightDiagnostics = {
+      status: "ready",
+      contextOptions,
+      selectedDeviceType: state.selectedWebNnDeviceType,
+      attemptedDeviceTypes: [contextOptions.deviceType],
+      attempts: [{
+        deviceType: contextOptions.deviceType,
+        powerPreference: contextOptions.powerPreference,
+        status: "ready",
+      }],
+      webgpuBridgeRequested: true,
+      webgpuBridge: bridgeDiagnostics,
+    };
+    if (typeof context.close === "function") context.close();
+    return { deviceType: state.selectedWebNnDeviceType };
   }
-  if (!context) {
+
+  const candidates = normalizeWebNnDeviceTypeCandidates(options);
+  const attempts = [];
+  const powerPreference = options.webnnPowerPreference || DEFAULTS.webnnPowerPreference;
+  for (const deviceType of candidates) {
+    const contextOptions = { deviceType, powerPreference };
+    const started = performance.now();
+    try {
+      context = await ml.createContext(contextOptions);
+      attempts.push({
+        deviceType,
+        powerPreference,
+        status: context ? "ready" : "failed",
+        reason: context ? null : "no-context-returned",
+        elapsedMs: roundMs(performance.now() - started),
+      });
+      if (context) {
+        state.selectedWebNnDeviceType = deviceType;
+        break;
+      }
+    } catch (error) {
+      attempts.push({
+        deviceType,
+        powerPreference,
+        status: "failed",
+        error: String(error?.message || error),
+        elapsedMs: roundMs(performance.now() - started),
+      });
+    }
+  }
+
+  if (!context || !state.selectedWebNnDeviceType) {
     state.webnnPreflightDiagnostics = {
       status: "failed",
       reason: "no-context-returned",
-      contextOptions,
+      selectedDeviceType: null,
+      attemptedDeviceTypes: candidates,
+      attempts,
+      webgpuBridgeRequested: false,
       webgpuBridge: bridgeDiagnostics,
     };
-    throw new Error("WebNN preflight failed: no ML context returned.");
+    throw new Error(`WebNN preflight failed: no ML context returned for ${candidates.join(", ")}.`);
   }
+
   state.webnnPreflightDiagnostics = {
     status: "ready",
-    contextOptions,
-    webgpuBridgeRequested: Boolean(options.webnnUseWebGpuDevice),
+    contextOptions: {
+      deviceType: state.selectedWebNnDeviceType,
+      powerPreference,
+    },
+    selectedDeviceType: state.selectedWebNnDeviceType,
+    attemptedDeviceTypes: candidates,
+    attempts,
+    webgpuBridgeRequested: false,
     webgpuBridge: bridgeDiagnostics,
   };
   if (typeof context.close === "function") context.close();
-  return { deviceType: contextOptions.deviceType };
+  return { deviceType: state.selectedWebNnDeviceType };
+}
+
+function resolveRequestedWebNnDeviceType(options = {}) {
+  const requested = String(options.webnnDeviceType || DEFAULTS.webnnDeviceType || "cpu").trim().toLowerCase();
+  if (requested === "auto") return normalizeWebNnDeviceTypeCandidates(options)[0] || "cpu";
+  return ["npu", "gpu", "cpu"].includes(requested) ? requested : "cpu";
+}
+
+function resolveActiveWebNnDeviceType(options = {}) {
+  return state.selectedWebNnDeviceType || resolveRequestedWebNnDeviceType(options);
+}
+
+function normalizeWebNnDeviceTypeCandidates(options = {}) {
+  const requested = String(options.webnnDeviceType || DEFAULTS.webnnDeviceType || "cpu").trim().toLowerCase();
+  const raw = requested === "auto"
+    ? options.webnnDeviceTypeCandidates || DEFAULTS.webnnDeviceTypeCandidates || ["npu", "gpu", "cpu"]
+    : [requested];
+  const result = [];
+  for (const value of normalizeList(raw)) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (["npu", "gpu", "cpu"].includes(normalized) && !result.includes(normalized)) result.push(normalized);
+  }
+  return result.length ? result : ["cpu"];
 }
 
 async function requestWebGpuAdapter(options) {
@@ -1749,7 +1908,7 @@ function executionProviderFor(provider, options) {
   if (provider === "webnn") {
     return {
       name: "webnn",
-      deviceType: options.webnnDeviceType || DEFAULTS.webnnDeviceType,
+      deviceType: resolveActiveWebNnDeviceType(options),
       powerPreference: options.webnnPowerPreference || DEFAULTS.webnnPowerPreference,
     };
   }
@@ -2956,10 +3115,27 @@ async function runFusedImagePair(retrievalQuery, imageData, keyframe, options) {
 async function runLighterGlue(query, keyframe, options) {
   const started = performance.now();
   const provider = activeProviderForModel("lighterglue");
+  const outputMode = state.lighterGlueOutputMode || "matches";
+  const timeoutMs = inferenceTimeoutMs("lighterglue", options);
   const tensorStarted = performance.now();
   const queryTensorBundle = ensureQueryTensorBundle(query, options);
   const keyframeTensorBundle = ensureKeyframeTensorBundle(keyframe, options);
   const keyframeTensorElapsedMs = roundMs(performance.now() - tensorStarted);
+  state.lastLighterGlueStart = {
+    at: new Date().toISOString(),
+    provider,
+    selectedWebNnDeviceType: provider === "webnn" ? state.selectedWebNnDeviceType : null,
+    keyframeId: keyframe?.id || null,
+    queryFeatures: query.count,
+    keyframeFeatures: keyframe.count,
+    queryTensorFeatures: queryTensorBundle.tensorCount,
+    keyframeTensorFeatures: keyframeTensorBundle.tensorCount,
+    fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
+    keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
+    keyframeTensorElapsedMs,
+    lighterGlueOutputMode: outputMode,
+    timeoutMs,
+  };
   postProgress({
     kind: "model-run",
     stage: "lighterglue:start",
@@ -2972,6 +3148,9 @@ async function runLighterGlue(query, keyframe, options) {
     fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
     keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
     keyframeTensorElapsedMs,
+    lighterGlueOutputMode: outputMode,
+    selectedWebNnDeviceType: provider === "webnn" ? state.selectedWebNnDeviceType : null,
+    timeoutMs,
   });
   await flushProgress();
   const feeds = {
@@ -2980,12 +3159,37 @@ async function runLighterGlue(query, keyframe, options) {
     desc0: queryTensorBundle.descriptorTensor,
     desc1: keyframeTensorBundle.descriptorTensor,
   };
-  const output = await withTimeout(
-    state.lighterGlueSession.run(feeds),
-    inferenceTimeoutMs("lighterglue", options),
-    `LighterGlue ${provider || "unknown"} inference`,
-  );
-  const outputMode = state.lighterGlueOutputMode || "matches";
+  let output;
+  try {
+    output = await withTimeout(
+      state.lighterGlueSession.run(feeds),
+      timeoutMs,
+      `LighterGlue ${provider || "unknown"} inference`,
+    );
+  } catch (error) {
+    state.lastLighterGlueFailure = {
+      ...state.lastLighterGlueStart,
+      failedAt: new Date().toISOString(),
+      elapsedMs: roundMs(performance.now() - started),
+      error: String(error?.message || error),
+    };
+    postProgress({
+      kind: "model-run",
+      stage: "lighterglue:failed",
+      provider,
+      keyframeId: keyframe?.id || null,
+      error: state.lastLighterGlueFailure.error,
+      elapsedMs: state.lastLighterGlueFailure.elapsedMs,
+      queryTensorFeatures: queryTensorBundle.tensorCount,
+      keyframeTensorFeatures: keyframeTensorBundle.tensorCount,
+      fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
+      lighterGlueOutputMode: outputMode,
+      selectedWebNnDeviceType: provider === "webnn" ? state.selectedWebNnDeviceType : null,
+      timeoutMs,
+    });
+    await flushProgress();
+    throw error;
+  }
   const matches = outputMode === "assignment-scores"
     ? matchesFromAssignmentScores(output, queryTensorBundle, keyframeTensorBundle, options)
     : matchesFromLighterGlueList(output, queryTensorBundle, keyframeTensorBundle, options);

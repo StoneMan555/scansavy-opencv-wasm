@@ -112,7 +112,8 @@ export interface ScanSavvyRuntimeInitOptions {
   webgpuUsePreflightDevice?: boolean;
   webgpuProfiling?: boolean;
   webgpuWasmNumThreads?: number | "auto";
-  webnnDeviceType?: "cpu" | "gpu" | "npu";
+  webnnDeviceType?: "cpu" | "gpu" | "npu" | "auto";
+  webnnDeviceTypeCandidates?: Array<"cpu" | "gpu" | "npu">;
   webnnPowerPreference?: "high-performance" | "low-power" | "default";
   webnnUseWebGpuDevice?: boolean;
   webnnFreeDimensionOverrides?: boolean;

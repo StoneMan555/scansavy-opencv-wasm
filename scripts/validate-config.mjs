@@ -49,6 +49,7 @@ assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-384-fixed" &&
 assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-512-fixed" && model.optional === true));
 assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3"));
 assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3-webnn-core-384" && model.url === "generated:lighterglue-webnn-core"));
+assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3-webnn-core-256" && model.url === "generated:lighterglue-webnn-core-256"));
 assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-lighterglue-pair-l3-384-640" && model.optional === true));
 assert.ok(runtimeAssets.onnxRuntime.assets.some((asset) => asset.path.includes("ort-wasm")));
 assert.ok(runtimeAssets.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.all.min.js"));
@@ -64,6 +65,15 @@ assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-l
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg"]?.lighterGlueCoreFixedFeatureCount, 384);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg"]?.lighterGlueFixedFeatureCount, 384);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg"]?.webnnFreeDimensionOverrides, true);
+assert.deepEqual(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.providers, ["webnn"]);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.webnnDeviceType, "auto");
+assert.deepEqual(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.webnnDeviceTypeCandidates, ["npu", "gpu", "cpu"]);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueProvider, "webnn");
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueWebNnCore, true);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueCoreFixedFeatureCount, 256);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueFixedFeatureCount, 256);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.maxQueryFeatures, 256);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.maxKeyframeFeatures, 256);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.wasmNumThreads, 8);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.webgpuWasmNumThreads, 8);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.candidateHydrationConcurrency, 8);
