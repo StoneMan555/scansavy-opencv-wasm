@@ -46,6 +46,7 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.equal(config.canonicalExport.dynamicImageDimensions, true);
   assert.ok(config.models.some((model) => model.id === "xfeat-2048-dynamic" && model.path.endsWith(".onnx")));
   assert.ok(config.models.some((model) => model.id === "lighterglue-l3" && model.source.includes("noahzhy")));
+  assert.ok(config.models.some((model) => model.id === "lighterglue-l3-webnn-core-384" && model.url === "generated:lighterglue-webnn-core"));
   assert.ok(config.models.some((model) => model.id === "xfeat-lighterglue-pair-l3-384-640" && model.optional === true));
   assert.ok(config.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.wasm.min.js"));
   assert.ok(config.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.webgpu.min.js"));
@@ -54,6 +55,8 @@ test("Runtime asset config locks XFeat, LighterGlue, and ONNX Runtime assets", (
   assert.deepEqual(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].providers, ["webnn", "webgpu", "wasm"]);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-max"].lighterGlueProvider, "wasm");
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-webnn-lg"].lighterGlueProvider, "webnn");
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-webnn-lg"].lighterGlueWebNnCore, true);
+  assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-webnn-lg"].lighterGlueCoreFixedFeatureCount, 384);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-webnn-lg"].lighterGlueFixedFeatureCount, 384);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-s23-plus-webnn-lg"].webnnFreeDimensionOverrides, true);
   assert.equal(config.onnxRuntime.runtimeProfiles["phone-webnn-npu"].lighterGlueProvider, "wasm");
@@ -92,6 +95,8 @@ test("High-quality runtime worker exposes XFeat/LighterGlue and projection messa
     "inferXFeatInputShape",
     "runFusedImagePair",
     "freeDimensionOverridesFor",
+    "lighterGlueModelForProvider",
+    "matchesFromAssignmentScores",
     "lighterGlueFixedFeatureCountFor",
     "ensureQueryTensorBundle",
     'value === "fused-pair"',

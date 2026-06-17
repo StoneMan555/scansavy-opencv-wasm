@@ -45,7 +45,7 @@ Static export hosts must add those headers outside Next.js. The ScanSavvy dev st
 | `phone-webgpu` | Default physical Android Chrome test, tuned to the Samsung S23+ baseline | `webgpu`, then `wasm` | up to `8` when cross-origin isolated |
 | `phone-webnn-npu` | Physical Android Chrome NPU probe for S23+-class phones | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
 | `phone-s23-plus-max` | Aggressive physical S23+ stress profile for fastest browser-side path discovery. XFeat can run on WebNN/NPU while LighterGlue defaults to the stable WASM matcher. | `webnn`, then `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
-| `phone-s23-plus-webnn-lg` | Strict physical S23+ WebNN LighterGlue probe. XFeat and LighterGlue both use WebNN with fixed 384-keypoint matcher tensors and ONNX Runtime free-dimension overrides. | `webnn`, then `webgpu`, then `wasm` | up to `8` if a later provider is selected |
+| `phone-s23-plus-webnn-lg` | Strict physical S23+ WebNN LighterGlue probe. XFeat and the fixed 384-keypoint LighterGlue score core use ONNX Runtime's WebNN EP; JS handles the dynamic mutual-nearest match tail. | `webnn`, then `webgpu`, then `wasm` | up to `8` if a later provider is selected |
 | `phone-webgpu-fast` | Physical phone speed lane | `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
 | `phone-webgpu-quality` | Physical phone quality lane | `webgpu`, then `wasm` | up to `8` when it falls back to WASM |
 | `phone-wasm-safe` | Physical phone fallback when WebGPU/WebNN are disabled or unstable | `wasm` | up to `8` when cross-origin isolated |
@@ -60,7 +60,7 @@ The default local-neighborhood cache is intentionally robustness-first: an `8m` 
 
 `phone-webnn-npu` is intentionally a physical-device probe. Android emulators may expose `navigator.gpu` without a usable adapter and generally do not expose `navigator.ml.createContext`; in that case the worker records the failed provider attempts and falls back to the same WASM lane. `emulator-webnn-gpu` exists only to test whether an emulator Chrome build exposes WebNN when started with WebNN feature flags. Treat a fallback result as useful evidence, not a failure of the relocalizer.
 
-`phone-s23-plus-webnn-lg` is the strict LighterGlue-on-WebNN experiment. LighterGlue's ONNX graph has symbolic `num_keypoints0` and `num_keypoints1` inputs, so this profile fixes both dimensions at `384`, pads/truncates query and MapPack keyframe tensors to that shape, and passes ONNX Runtime `freeDimensionOverrides` during WebNN session creation. Keep this separate from `phone-s23-plus-max` until physical-phone evidence shows the strict WebNN matcher is faster and stable.
+`phone-s23-plus-webnn-lg` is the strict LighterGlue-on-WebNN experiment. The full LighterGlue ONNX graph has a dynamic match-list tail (`TopK`, `Range`, `NonZero`, `GatherND`) that can make Android Chrome WebNN spend too long compiling the session. This profile therefore uses ONNX Runtime's WebNN execution provider for a generated fixed-shape `lighterglue_L3_webnn_core_384.onnx` model that outputs dense assignment scores, then performs mutual-nearest match extraction in JavaScript. Keep this separate from `phone-s23-plus-max` until physical-phone evidence shows the strict WebNN matcher is faster and stable.
 
 The WebGPU preflight now sweeps adapter request variants and reports the exact failure point. Phone profiles try the normal high-performance core adapter first. Emulator profiles also try compatibility-level and fallback adapter requests so ScanSavvy can distinguish "Chrome exposes `navigator.gpu`" from "Chrome can actually return a usable adapter for ONNX Runtime WebGPU." The WebNN probe can optionally request a WebNN context through a WebGPU device for diagnosing future WebNN/WebGPU interop.
 
@@ -101,6 +101,7 @@ dist/
   models/
     xfeat_2048_dynamic.onnx
     lighterglue_L3.onnx
+    lighterglue_L3_webnn_core_384.onnx
   ort/
     ort.webgpu.min.js
     ort.wasm.min.js
@@ -143,6 +144,14 @@ Regenerate the canonical XFeat/LighterGlue ONNX pair from `noahzhy/xfeat_lightgl
 
 ```powershell
 .\scripts\export-xfeat-lighterglue-onnx.ps1 -InstallDeps
+npm run compress
+npm run manifest
+```
+
+Generate the WebNN-friendly LighterGlue score-core model from the canonical matcher:
+
+```powershell
+npm run export:lighterglue:webnn-core
 npm run compress
 npm run manifest
 ```

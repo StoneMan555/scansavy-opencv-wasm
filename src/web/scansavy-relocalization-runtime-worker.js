@@ -36,6 +36,7 @@ const DEFAULTS = {
   ortJsepWasmFile: "/scansavy-relocalization-runtime/ort/ort-wasm-simd-threaded.jsep.wasm",
   xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
   lighterGlueUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3.onnx",
+  lighterGlueCoreUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_core_384.onnx",
   fusedPairUrl: "/scansavy-relocalization-runtime/models/xfeat_lighterglue_pair_L3_384_640x640.onnx",
   opencvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv-geometry.js",
   fallbackOpenCvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv.js",
@@ -57,6 +58,8 @@ const DEFAULTS = {
   retrievalConfidenceThreshold: 0.12,
   lighterGlueScoreThreshold: 0.2,
   lighterGlueFixedFeatureCount: 0,
+  lighterGlueWebNnCore: true,
+  lighterGlueCoreFixedFeatureCount: 384,
   webnnLighterGlueFixedFeatureCount: 384,
   webnnFreeDimensionOverrides: true,
   fusedPairScoreThreshold: 0,
@@ -298,6 +301,9 @@ const RUNTIME_PROFILES = {
     adaptiveCandidateEscalation: true,
     burstFrameOrder: "center-first",
     lighterGlueFixedFeatureCount: 384,
+    lighterGlueWebNnCore: true,
+    lighterGlueCoreUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_core_384.onnx",
+    lighterGlueCoreFixedFeatureCount: 384,
     webnnLighterGlueFixedFeatureCount: 384,
     webnnFreeDimensionOverrides: true,
     webgpuPowerPreference: "high-performance",
@@ -542,6 +548,7 @@ const state = {
   fusedPairProvider: null,
   xfeatSession: null,
   lighterGlueSession: null,
+  lighterGlueOutputMode: "matches",
   fusedPairSession: null,
   opencv: null,
   sidecar: null,
@@ -727,6 +734,11 @@ function runtimeDiagnostics() {
     maxModelSide: Number(state.options.maxModelSide || DEFAULTS.maxModelSide),
     onnxArchitecture: normalizedOnnxArchitecture(state.options),
     xfeatUrl: state.options.xfeatUrl || DEFAULTS.xfeatUrl,
+    lighterGlueUrl: state.options.lighterGlueUrl || DEFAULTS.lighterGlueUrl,
+    lighterGlueCoreUrl: state.options.lighterGlueCoreUrl || DEFAULTS.lighterGlueCoreUrl,
+    lighterGlueOutputMode: state.lighterGlueOutputMode || "matches",
+    lighterGlueWebNnCore: state.options.lighterGlueWebNnCore !== false,
+    lighterGlueCoreFixedFeatureCount: Number(state.options.lighterGlueCoreFixedFeatureCount || DEFAULTS.lighterGlueCoreFixedFeatureCount),
     fusedPairUrl: state.options.fusedPairUrl || DEFAULTS.fusedPairUrl,
     hasFusedPairSession: Boolean(state.fusedPairSession),
     fixedInputWidth: Number(state.options.fixedInputWidth || 0),
@@ -957,6 +969,13 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
     "parallelBurstCandidatesPerFrame",
     "xfeatUrl",
     "fallbackXFeatUrl",
+    "lighterGlueUrl",
+    "lighterGlueCoreUrl",
+    "lighterGlueWebNnCore",
+    "lighterGlueCoreFixedFeatureCount",
+    "lighterGlueFixedFeatureCount",
+    "webnnLighterGlueFixedFeatureCount",
+    "webnnFreeDimensionOverrides",
     "fusedPairUrl",
     "fusedPairScoreThreshold",
     "fusedPairKeyframeMaxLinkDistancePx",
@@ -1065,6 +1084,7 @@ async function createSessions(providers) {
       const sessionTimeoutMs = sessionTimeoutForProvider(provider, state.options);
       state.xfeatSession = null;
       state.lighterGlueSession = null;
+      state.lighterGlueOutputMode = "matches";
       state.fusedPairSession = null;
       state.xfeatProvider = null;
       state.lighterGlueProvider = null;
@@ -1089,11 +1109,13 @@ async function createSessions(providers) {
       });
       state.xfeatSession = xfeatSessionResult.session;
       state.xfeatProvider = xfeatProvider;
-      const lighterGlueUrl = resolveUrl(state.options.lighterGlueUrl || DEFAULTS.lighterGlueUrl);
+      const lighterGlueModel = lighterGlueModelForProvider(lighterGlueProvider, state.options);
+      const lighterGlueUrl = resolveUrl(lighterGlueModel.url);
       await prepareProviderForModel(lighterGlueProvider);
       setInitStage(`sessions:${provider}:lighterglue:start`, {
         lighterGlueUrl,
         lighterGlueProvider,
+        lighterGlueOutputMode: lighterGlueModel.outputMode,
       });
       const lighterGlueSessionResult = await withTimeout(
         createOrtSessionFromUrl(lighterGlueUrl, sessionOptionsFor(lighterGlueProvider, state.options, "lighterglue"), "LighterGlue model"),
@@ -1102,7 +1124,11 @@ async function createSessions(providers) {
       );
       state.lighterGlueSession = lighterGlueSessionResult.session;
       state.lighterGlueProvider = lighterGlueProvider;
-      setInitStage(`sessions:${provider}:lighterglue:ready`, { lighterGlueProvider });
+      state.lighterGlueOutputMode = lighterGlueModel.outputMode;
+      setInitStage(`sessions:${provider}:lighterglue:ready`, {
+        lighterGlueProvider,
+        lighterGlueOutputMode: state.lighterGlueOutputMode,
+      });
       if (usesFusedPairArchitecture(state.options)) {
         await prepareProviderForModel(fusedPairProvider);
         const fusedPairUrl = resolveUrl(state.options.fusedPairUrl || DEFAULTS.fusedPairUrl);
@@ -1123,6 +1149,7 @@ async function createSessions(providers) {
         status: "ready",
         xfeatProvider,
         lighterGlueProvider,
+        lighterGlueOutputMode: state.lighterGlueOutputMode,
         fusedPairProvider: usesFusedPairArchitecture(state.options) ? fusedPairProvider : null,
         xfeatUrl: xfeatSessionResult.url,
         xfeatFallbackUsed: xfeatSessionResult.fallbackUsed,
@@ -1177,6 +1204,21 @@ function providerForModel(model, primaryProvider, options) {
     return model === "lighterglue" && primaryProvider === "webnn" ? "wasm" : primaryProvider;
   }
   return normalizeProviderName(requested) || primaryProvider;
+}
+
+function lighterGlueModelForProvider(provider, options = {}) {
+  const normalizedProvider = normalizeProviderName(provider);
+  const useWebNnCore = normalizedProvider === "webnn" && options.lighterGlueWebNnCore !== false;
+  if (useWebNnCore) {
+    return {
+      url: options.lighterGlueCoreUrl || DEFAULTS.lighterGlueCoreUrl,
+      outputMode: "assignment-scores",
+    };
+  }
+  return {
+    url: options.lighterGlueUrl || DEFAULTS.lighterGlueUrl,
+    outputMode: "matches",
+  };
 }
 
 function activeProviderForModel(model) {
@@ -1670,6 +1712,7 @@ function sessionOptionsFor(provider, options, model = "primary") {
 
 function freeDimensionOverridesFor(provider, model, options = {}) {
   if (provider !== "webnn" || model !== "lighterglue" || options.webnnFreeDimensionOverrides === false) return null;
+  if (options.lighterGlueWebNnCore !== false) return null;
   const featureCount = lighterGlueFixedFeatureCountFor(provider, options);
   if (!featureCount) return null;
   return {
@@ -1681,6 +1724,11 @@ function freeDimensionOverridesFor(provider, model, options = {}) {
 function lighterGlueFixedFeatureCountFor(provider, options = {}) {
   const explicit = Number(options.lighterGlueFixedFeatureCount || 0);
   if (Number.isFinite(explicit) && explicit > 0) return Math.max(1, Math.floor(explicit));
+  const useWebNnCore = provider === "webnn" && options.lighterGlueWebNnCore !== false;
+  if (useWebNnCore) {
+    const coreExplicit = Number(options.lighterGlueCoreFixedFeatureCount || DEFAULTS.lighterGlueCoreFixedFeatureCount || 0);
+    if (Number.isFinite(coreExplicit) && coreExplicit > 0) return Math.max(1, Math.floor(coreExplicit));
+  }
   if (provider !== "webnn") return 0;
   const webnnExplicit = Number(options.webnnLighterGlueFixedFeatureCount || DEFAULTS.webnnLighterGlueFixedFeatureCount || 0);
   if (Number.isFinite(webnnExplicit) && webnnExplicit > 0) return Math.max(1, Math.floor(webnnExplicit));
@@ -2937,6 +2985,46 @@ async function runLighterGlue(query, keyframe, options) {
     inferenceTimeoutMs("lighterglue", options),
     `LighterGlue ${provider || "unknown"} inference`,
   );
+  const outputMode = state.lighterGlueOutputMode || "matches";
+  const matches = outputMode === "assignment-scores"
+    ? matchesFromAssignmentScores(output, queryTensorBundle, keyframeTensorBundle, options)
+    : matchesFromLighterGlueList(output, queryTensorBundle, keyframeTensorBundle, options);
+  const response = {
+    keyframe,
+    query,
+    matches,
+    rawMatchCount: matches.length,
+    geometryMatchCount: matches.length,
+    candidateMode: "single-frame",
+    matcherArchitecture: "split",
+    matcherProvider: provider,
+    lighterGlueOutputMode: outputMode,
+    queryTensorFeatures: queryTensorBundle.tensorCount,
+    keyframeTensorFeatures: keyframeTensorBundle.tensorCount,
+    fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
+    keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
+    keyframeTensorCacheKey: keyframeTensorBundle.cacheKey,
+    keyframeTensorElapsedMs,
+    elapsedMs: roundMs(performance.now() - started),
+  };
+  postProgress({
+    kind: "model-run",
+    stage: "lighterglue:done",
+    provider,
+    keyframeId: keyframe?.id || null,
+    matchCount: matches.length,
+    lighterGlueOutputMode: outputMode,
+    queryTensorFeatures: queryTensorBundle.tensorCount,
+    keyframeTensorFeatures: keyframeTensorBundle.tensorCount,
+    fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
+    keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
+    keyframeTensorElapsedMs,
+    elapsedMs: response.elapsedMs,
+  });
+  return response;
+}
+
+function matchesFromLighterGlueList(output, queryTensorBundle, keyframeTensorBundle, options) {
   const matchesRaw = outputTensor(output, ["matches", "matches0", "indices"], 0);
   const scoresRaw = outputTensor(output, ["scores", "mscores", "matching_scores"], 1, false);
   const matches = [];
@@ -2954,37 +3042,52 @@ async function runLighterGlue(query, keyframe, options) {
     ) continue;
     matches.push({ queryIndex, mapIndex, score });
   }
-  const response = {
-    keyframe,
-    query,
-    matches,
-    rawMatchCount: matches.length,
-    geometryMatchCount: matches.length,
-    candidateMode: "single-frame",
-    matcherArchitecture: "split",
-    matcherProvider: provider,
-    queryTensorFeatures: queryTensorBundle.tensorCount,
-    keyframeTensorFeatures: keyframeTensorBundle.tensorCount,
-    fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
-    keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
-    keyframeTensorCacheKey: keyframeTensorBundle.cacheKey,
-    keyframeTensorElapsedMs,
-    elapsedMs: roundMs(performance.now() - started),
-  };
-  postProgress({
-    kind: "model-run",
-    stage: "lighterglue:done",
-    provider,
-    keyframeId: keyframe?.id || null,
-    matchCount: matches.length,
-    queryTensorFeatures: queryTensorBundle.tensorCount,
-    keyframeTensorFeatures: keyframeTensorBundle.tensorCount,
-    fixedFeatureCount: queryTensorBundle.fixedCount || keyframeTensorBundle.fixedCount || 0,
-    keyframeTensorCacheHit: keyframeTensorBundle.cacheHit,
-    keyframeTensorElapsedMs,
-    elapsedMs: response.elapsedMs,
-  });
-  return response;
+  return matches;
+}
+
+function matchesFromAssignmentScores(output, queryTensorBundle, keyframeTensorBundle, options) {
+  const tensor = outputTensor(output, ["assignment_scores", "/net/log_assignment.2/Add_2_output_0", "scores"], 0);
+  const data = tensor.data;
+  const dims = Array.isArray(tensor.dims) ? tensor.dims.map(Number) : [];
+  const tensorQueryCount = Number(dims[dims.length - 2] || queryTensorBundle.tensorCount || 0);
+  const tensorKeyframeCount = Number(dims[dims.length - 1] || keyframeTensorBundle.tensorCount || 0);
+  const queryCount = Math.min(queryTensorBundle.effectiveCount, tensorQueryCount);
+  const keyframeCount = Math.min(keyframeTensorBundle.effectiveCount, tensorKeyframeCount);
+  const threshold = Number(options.lighterGlueScoreThreshold);
+  const bestKeyframeForQuery = new Int32Array(queryCount);
+  const bestScoreForQuery = new Float32Array(queryCount);
+  const bestQueryForKeyframe = new Int32Array(keyframeCount);
+  const bestScoreForKeyframe = new Float32Array(keyframeCount);
+  bestKeyframeForQuery.fill(-1);
+  bestScoreForQuery.fill(Number.NEGATIVE_INFINITY);
+  bestQueryForKeyframe.fill(-1);
+  bestScoreForKeyframe.fill(Number.NEGATIVE_INFINITY);
+
+  for (let queryIndex = 0; queryIndex < queryCount; queryIndex += 1) {
+    const rowOffset = queryIndex * tensorKeyframeCount;
+    for (let mapIndex = 0; mapIndex < keyframeCount; mapIndex += 1) {
+      const value = Number(data[rowOffset + mapIndex]);
+      if (!Number.isFinite(value)) continue;
+      if (value > bestScoreForQuery[queryIndex]) {
+        bestScoreForQuery[queryIndex] = value;
+        bestKeyframeForQuery[queryIndex] = mapIndex;
+      }
+      if (value > bestScoreForKeyframe[mapIndex]) {
+        bestScoreForKeyframe[mapIndex] = value;
+        bestQueryForKeyframe[mapIndex] = queryIndex;
+      }
+    }
+  }
+
+  const matches = [];
+  for (let queryIndex = 0; queryIndex < queryCount; queryIndex += 1) {
+    const mapIndex = bestKeyframeForQuery[queryIndex];
+    if (mapIndex < 0 || bestQueryForKeyframe[mapIndex] !== queryIndex) continue;
+    const score = Math.exp(Number(bestScoreForQuery[queryIndex]));
+    if (!Number.isFinite(score) || score < threshold) continue;
+    matches.push({ queryIndex, mapIndex, score });
+  }
+  return matches;
 }
 
 async function loadKeyframeImageData(keyframe) {

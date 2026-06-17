@@ -17,6 +17,16 @@ async function syncAsset(asset) {
   mkdirSync(dirname(target), { recursive: true });
   if (!existsSync(target) || process.argv.includes("--force")) {
     if (!asset.url || String(asset.url).startsWith("generated:")) {
+      if (String(asset.url).startsWith("generated:lighterglue-webnn-core")) {
+        console.log(JSON.stringify({
+          id: asset.id,
+          path: asset.path,
+          status: "deferred",
+          source: asset.source,
+          reason: "Generated after canonical LighterGlue is present by npm run export:lighterglue:webnn-core.",
+        }));
+        return;
+      }
       throw new Error(
         `${asset.path} must be generated before packaging. Run npm run export:xfeat, then rerun npm run package:runtime.`,
       );

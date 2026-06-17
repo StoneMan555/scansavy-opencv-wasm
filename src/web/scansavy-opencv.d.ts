@@ -96,6 +96,9 @@ export interface ScanSavvyRuntimeInitOptions {
   ortWasmPaths?: string;
   xfeatUrl?: string;
   lighterGlueUrl?: string;
+  lighterGlueCoreUrl?: string;
+  lighterGlueWebNnCore?: boolean;
+  lighterGlueCoreFixedFeatureCount?: number;
   opencvJsUrl?: string;
   fallbackOpenCvJsUrl?: string;
   providers?: Array<"webnn" | "webgpu" | "wasm">;

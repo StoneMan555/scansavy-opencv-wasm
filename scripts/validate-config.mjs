@@ -48,6 +48,7 @@ assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-2048-dynamic"
 assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-384-fixed" && model.optional === true));
 assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-512-fixed" && model.optional === true));
 assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3"));
+assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3-webnn-core-384" && model.url === "generated:lighterglue-webnn-core"));
 assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-lighterglue-pair-l3-384-640" && model.optional === true));
 assert.ok(runtimeAssets.onnxRuntime.assets.some((asset) => asset.path.includes("ort-wasm")));
 assert.ok(runtimeAssets.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.all.min.js"));
@@ -59,6 +60,8 @@ assert.deepEqual(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.webnnDeviceType, "npu");
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.lighterGlueProvider, "wasm");
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg"]?.lighterGlueProvider, "webnn");
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg"]?.lighterGlueWebNnCore, true);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg"]?.lighterGlueCoreFixedFeatureCount, 384);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg"]?.lighterGlueFixedFeatureCount, 384);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg"]?.webnnFreeDimensionOverrides, true);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-max"]?.wasmNumThreads, 8);

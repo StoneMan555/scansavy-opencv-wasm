@@ -257,6 +257,9 @@
         "lighterGlueFixedFeatureCount": 384,
         "webnnLighterGlueFixedFeatureCount": 384,
         "webnnFreeDimensionOverrides": true,
+        "lighterGlueWebNnCore": true,
+        "lighterGlueCoreUrl": "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_core_384.onnx",
+        "lighterGlueCoreFixedFeatureCount": 384,
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
         "webgpuGraphCapture": false,
@@ -718,6 +721,15 @@
       "license": "Apache-2.0",
       "source": "noahzhy/xfeat_lightglue_onnx 155f5e1b6c9453162c286eacb0003fa4b8461a9c/onnx/lighterglue_L3.onnx",
       "note": "Default high-quality browser matcher. Deeper LighterGlue variants are deferred until phone benchmarks justify the payload."
+    },
+    {
+      "id": "lighterglue-l3-webnn-core-384",
+      "name": "lighterglue_L3_webnn_core_384.onnx",
+      "path": "models/lighterglue_L3_webnn_core_384.onnx",
+      "url": "generated:lighterglue-webnn-core",
+      "license": "Apache-2.0",
+      "source": "Generated from lighterglue_L3.onnx by scripts/export-lighterglue-webnn-core.py, retaining the dense assignment-score core and moving dynamic mutual-nearest match extraction to JavaScript.",
+      "note": "WebNN-friendly fixed 384-keypoint core model for Android Chrome. Outputs assignment_scores [1,384,384]."
     },
     {
       "id": "xfeat-lighterglue-pair-l3-384-640",
