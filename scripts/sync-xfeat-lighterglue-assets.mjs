@@ -17,7 +17,10 @@ async function syncAsset(asset) {
   mkdirSync(dirname(target), { recursive: true });
   if (!existsSync(target) || process.argv.includes("--force")) {
     if (!asset.url || String(asset.url).startsWith("generated:")) {
-      if (String(asset.url).startsWith("generated:lighterglue-webnn-core")) {
+      if (
+        String(asset.url).startsWith("generated:lighterglue-webnn-core") ||
+        String(asset.url).startsWith("generated:lighterglue-webnn-logits")
+      ) {
         console.log(JSON.stringify({
           id: asset.id,
           path: asset.path,

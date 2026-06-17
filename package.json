@@ -9,7 +9,7 @@
     "validate:config": "node scripts/validate-config.mjs",
     "manifest": "node scripts/make-build-manifest.mjs",
     "export:xfeat": "powershell -ExecutionPolicy Bypass -File scripts/export-xfeat-lighterglue-onnx.ps1",
-    "export:lighterglue:webnn-core": "python scripts/export-lighterglue-webnn-core.py && python scripts/export-lighterglue-webnn-core.py --feature-count 256 --output dist/models/lighterglue_L3_webnn_core_256.onnx",
+    "export:lighterglue:webnn-core": "python scripts/export-lighterglue-webnn-core.py && python scripts/export-lighterglue-webnn-core.py --feature-count 256 --output dist/models/lighterglue_L3_webnn_core_256.onnx && python scripts/export-lighterglue-webnn-core.py --mode logits --output dist/models/lighterglue_L3_webnn_logits_384.onnx && python scripts/export-lighterglue-webnn-core.py --mode logits --feature-count 256 --output dist/models/lighterglue_L3_webnn_logits_256.onnx",
     "probe:combined-xfeat-lighterglue": "powershell -ExecutionPolicy Bypass -File scripts/probe-combined-xfeat-lighterglue-export.ps1",
     "assets:xfeat": "node scripts/sync-xfeat-lighterglue-assets.mjs",
     "assets:onnxruntime": "node scripts/sync-onnxruntime-web-assets.mjs",

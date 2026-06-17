@@ -50,6 +50,8 @@ assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-512-fixed" &&
 assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3"));
 assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3-webnn-core-384" && model.url === "generated:lighterglue-webnn-core"));
 assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3-webnn-core-256" && model.url === "generated:lighterglue-webnn-core-256"));
+assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3-webnn-logits-384" && model.url === "generated:lighterglue-webnn-logits"));
+assert.ok(runtimeAssets.models.some((model) => model.id === "lighterglue-l3-webnn-logits-256" && model.url === "generated:lighterglue-webnn-logits-256"));
 assert.ok(runtimeAssets.models.some((model) => model.id === "xfeat-lighterglue-pair-l3-384-640" && model.optional === true));
 assert.ok(runtimeAssets.onnxRuntime.assets.some((asset) => asset.path.includes("ort-wasm")));
 assert.ok(runtimeAssets.onnxRuntime.assets.some((asset) => asset.path === "ort/ort.all.min.js"));
@@ -70,6 +72,8 @@ assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-l
 assert.deepEqual(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.webnnDeviceTypeCandidates, ["npu", "gpu", "cpu"]);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueProvider, "webnn");
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueWebNnCore, true);
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueCoreOutputMode, "assignment-logits");
+assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueCoreUrl, "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_logits_256.onnx");
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueCoreFixedFeatureCount, 256);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.lighterGlueFixedFeatureCount, 256);
 assert.equal(runtimeAssets.onnxRuntime.runtimeProfiles?.["phone-s23-plus-webnn-lg-256"]?.maxQueryFeatures, 256);

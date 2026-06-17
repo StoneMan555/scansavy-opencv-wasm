@@ -331,7 +331,8 @@
         "webnnLighterGlueFixedFeatureCount": 256,
         "webnnFreeDimensionOverrides": true,
         "lighterGlueWebNnCore": true,
-        "lighterGlueCoreUrl": "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_core_256.onnx",
+        "lighterGlueCoreUrl": "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_logits_256.onnx",
+        "lighterGlueCoreOutputMode": "assignment-logits",
         "lighterGlueCoreFixedFeatureCount": 256,
         "webgpuPowerPreference": "high-performance",
         "webgpuPreferredLayout": "NCHW",
@@ -812,6 +813,24 @@
       "license": "Apache-2.0",
       "source": "Generated from lighterglue_L3.onnx by scripts/export-lighterglue-webnn-core.py --feature-count 256, retaining the dense assignment-score core and moving dynamic mutual-nearest match extraction to JavaScript.",
       "note": "WebNN-friendly fixed 256-keypoint core model for Android Chrome live tests. Outputs assignment_scores [1,256,256]."
+    },
+    {
+      "id": "lighterglue-l3-webnn-logits-384",
+      "name": "lighterglue_L3_webnn_logits_384.onnx",
+      "path": "models/lighterglue_L3_webnn_logits_384.onnx",
+      "url": "generated:lighterglue-webnn-logits",
+      "license": "Apache-2.0",
+      "source": "Generated from lighterglue_L3.onnx by scripts/export-lighterglue-webnn-core.py --mode logits, retaining the transformer and score/matchability logits while moving LogSoftmax and dynamic match extraction to JavaScript.",
+      "note": "WebNN-focused fixed 384-keypoint logits model for Android Chrome. Outputs similarity_scores [1,384,384] plus matchability logits."
+    },
+    {
+      "id": "lighterglue-l3-webnn-logits-256",
+      "name": "lighterglue_L3_webnn_logits_256.onnx",
+      "path": "models/lighterglue_L3_webnn_logits_256.onnx",
+      "url": "generated:lighterglue-webnn-logits-256",
+      "license": "Apache-2.0",
+      "source": "Generated from lighterglue_L3.onnx by scripts/export-lighterglue-webnn-core.py --mode logits --feature-count 256, retaining the transformer and score/matchability logits while moving LogSoftmax and dynamic match extraction to JavaScript.",
+      "note": "Strict WebNN phone-test model for Android Chrome. Avoids Log, LogSoftmax, TopK, NonZero and GatherND in the WebNN graph."
     },
     {
       "id": "xfeat-lighterglue-pair-l3-384-640",

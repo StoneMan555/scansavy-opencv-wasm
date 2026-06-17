@@ -37,6 +37,7 @@ const DEFAULTS = {
   xfeatUrl: "/scansavy-relocalization-runtime/models/xfeat_2048_dynamic.onnx",
   lighterGlueUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3.onnx",
   lighterGlueCoreUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_core_384.onnx",
+  lighterGlueCoreOutputMode: "assignment-scores",
   fusedPairUrl: "/scansavy-relocalization-runtime/models/xfeat_lighterglue_pair_L3_384_640x640.onnx",
   opencvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv-geometry.js",
   fallbackOpenCvJsUrl: "/scansavy-relocalization-runtime/scansavy-opencv.js",
@@ -359,7 +360,8 @@ const RUNTIME_PROFILES = {
     burstFrameOrder: "center-first",
     lighterGlueFixedFeatureCount: 256,
     lighterGlueWebNnCore: true,
-    lighterGlueCoreUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_core_256.onnx",
+    lighterGlueCoreUrl: "/scansavy-relocalization-runtime/models/lighterglue_L3_webnn_logits_256.onnx",
+    lighterGlueCoreOutputMode: "assignment-logits",
     lighterGlueCoreFixedFeatureCount: 256,
     webnnLighterGlueFixedFeatureCount: 256,
     webnnFreeDimensionOverrides: true,
@@ -801,6 +803,7 @@ function runtimeDiagnostics() {
     lighterGlueCoreUrl: state.options.lighterGlueCoreUrl || DEFAULTS.lighterGlueCoreUrl,
     lighterGlueOutputMode: state.lighterGlueOutputMode || "matches",
     lighterGlueWebNnCore: state.options.lighterGlueWebNnCore !== false,
+    lighterGlueCoreOutputMode: state.options.lighterGlueCoreOutputMode || DEFAULTS.lighterGlueCoreOutputMode,
     lighterGlueCoreFixedFeatureCount: Number(state.options.lighterGlueCoreFixedFeatureCount || DEFAULTS.lighterGlueCoreFixedFeatureCount),
     fusedPairUrl: state.options.fusedPairUrl || DEFAULTS.fusedPairUrl,
     hasFusedPairSession: Boolean(state.fusedPairSession),
@@ -1042,6 +1045,7 @@ function applyProfileDefaults(profileOptions, overrideKeys = []) {
     "lighterGlueUrl",
     "lighterGlueCoreUrl",
     "lighterGlueWebNnCore",
+    "lighterGlueCoreOutputMode",
     "lighterGlueCoreFixedFeatureCount",
     "lighterGlueFixedFeatureCount",
     "webnnLighterGlueFixedFeatureCount",
@@ -1283,7 +1287,7 @@ function lighterGlueModelForProvider(provider, options = {}) {
   if (useWebNnCore) {
     return {
       url: options.lighterGlueCoreUrl || DEFAULTS.lighterGlueCoreUrl,
-      outputMode: "assignment-scores",
+      outputMode: options.lighterGlueCoreOutputMode || DEFAULTS.lighterGlueCoreOutputMode || "assignment-scores",
     };
   }
   return {
@@ -3190,9 +3194,11 @@ async function runLighterGlue(query, keyframe, options) {
     await flushProgress();
     throw error;
   }
-  const matches = outputMode === "assignment-scores"
-    ? matchesFromAssignmentScores(output, queryTensorBundle, keyframeTensorBundle, options)
-    : matchesFromLighterGlueList(output, queryTensorBundle, keyframeTensorBundle, options);
+  const matches = outputMode === "assignment-logits"
+    ? matchesFromAssignmentLogits(output, queryTensorBundle, keyframeTensorBundle, options)
+    : outputMode === "assignment-scores"
+      ? matchesFromAssignmentScores(output, queryTensorBundle, keyframeTensorBundle, options)
+      : matchesFromLighterGlueList(output, queryTensorBundle, keyframeTensorBundle, options);
   const response = {
     keyframe,
     query,
@@ -3292,6 +3298,109 @@ function matchesFromAssignmentScores(output, queryTensorBundle, keyframeTensorBu
     matches.push({ queryIndex, mapIndex, score });
   }
   return matches;
+}
+
+function matchesFromAssignmentLogits(output, queryTensorBundle, keyframeTensorBundle, options) {
+  const similarityTensor = outputTensor(output, ["similarity_scores", "/net/log_assignment.2/MatMul_output_0"], 0);
+  const matchability0Tensor = outputTensor(output, ["matchability_logits0", "/net/log_assignment.2/matchability/Add_output_0"], 1, false);
+  const matchability1Tensor = outputTensor(output, ["matchability_logits1", "/net/log_assignment.2/matchability_1/Add_output_0"], 2, false);
+  const data = similarityTensor.data;
+  const dims = Array.isArray(similarityTensor.dims) ? similarityTensor.dims.map(Number) : [];
+  const tensorQueryCount = Number(dims[dims.length - 2] || queryTensorBundle.tensorCount || 0);
+  const tensorKeyframeCount = Number(dims[dims.length - 1] || keyframeTensorBundle.tensorCount || 0);
+  const queryCount = Math.min(queryTensorBundle.effectiveCount, tensorQueryCount);
+  const keyframeCount = Math.min(keyframeTensorBundle.effectiveCount, tensorKeyframeCount);
+  const threshold = Number(options.lighterGlueScoreThreshold);
+  const rowLogSums = new Float32Array(queryCount);
+  const colLogSums = new Float32Array(keyframeCount);
+  const logMatchability0 = new Float32Array(queryCount);
+  const logMatchability1 = new Float32Array(keyframeCount);
+
+  for (let queryIndex = 0; queryIndex < queryCount; queryIndex += 1) {
+    rowLogSums[queryIndex] = logSumExpMatrixRow(data, queryIndex, keyframeCount, tensorKeyframeCount);
+    logMatchability0[queryIndex] = logSigmoid(Number(matchability0Tensor?.data?.[queryIndex] ?? 0));
+  }
+  for (let mapIndex = 0; mapIndex < keyframeCount; mapIndex += 1) {
+    colLogSums[mapIndex] = logSumExpMatrixColumn(data, mapIndex, queryCount, tensorKeyframeCount);
+    logMatchability1[mapIndex] = logSigmoid(Number(matchability1Tensor?.data?.[mapIndex] ?? 0));
+  }
+
+  const bestKeyframeForQuery = new Int32Array(queryCount);
+  const bestScoreForQuery = new Float32Array(queryCount);
+  const bestQueryForKeyframe = new Int32Array(keyframeCount);
+  const bestScoreForKeyframe = new Float32Array(keyframeCount);
+  bestKeyframeForQuery.fill(-1);
+  bestScoreForQuery.fill(Number.NEGATIVE_INFINITY);
+  bestQueryForKeyframe.fill(-1);
+  bestScoreForKeyframe.fill(Number.NEGATIVE_INFINITY);
+
+  for (let queryIndex = 0; queryIndex < queryCount; queryIndex += 1) {
+    const rowOffset = queryIndex * tensorKeyframeCount;
+    for (let mapIndex = 0; mapIndex < keyframeCount; mapIndex += 1) {
+      const value = Number(data[rowOffset + mapIndex]);
+      if (!Number.isFinite(value)) continue;
+      const scoreLog = (value - rowLogSums[queryIndex])
+        + (value - colLogSums[mapIndex])
+        + logMatchability0[queryIndex]
+        + logMatchability1[mapIndex];
+      if (scoreLog > bestScoreForQuery[queryIndex]) {
+        bestScoreForQuery[queryIndex] = scoreLog;
+        bestKeyframeForQuery[queryIndex] = mapIndex;
+      }
+      if (scoreLog > bestScoreForKeyframe[mapIndex]) {
+        bestScoreForKeyframe[mapIndex] = scoreLog;
+        bestQueryForKeyframe[mapIndex] = queryIndex;
+      }
+    }
+  }
+
+  const matches = [];
+  for (let queryIndex = 0; queryIndex < queryCount; queryIndex += 1) {
+    const mapIndex = bestKeyframeForQuery[queryIndex];
+    if (mapIndex < 0 || bestQueryForKeyframe[mapIndex] !== queryIndex) continue;
+    const score = Math.exp(Number(bestScoreForQuery[queryIndex]));
+    if (!Number.isFinite(score) || score < threshold) continue;
+    matches.push({ queryIndex, mapIndex, score });
+  }
+  return matches;
+}
+
+function logSumExpMatrixRow(data, queryIndex, keyframeCount, tensorKeyframeCount) {
+  const offset = queryIndex * tensorKeyframeCount;
+  let maxValue = Number.NEGATIVE_INFINITY;
+  for (let mapIndex = 0; mapIndex < keyframeCount; mapIndex += 1) {
+    const value = Number(data[offset + mapIndex]);
+    if (Number.isFinite(value) && value > maxValue) maxValue = value;
+  }
+  if (!Number.isFinite(maxValue)) return Number.POSITIVE_INFINITY;
+  let sum = 0;
+  for (let mapIndex = 0; mapIndex < keyframeCount; mapIndex += 1) {
+    const value = Number(data[offset + mapIndex]);
+    if (Number.isFinite(value)) sum += Math.exp(value - maxValue);
+  }
+  return maxValue + Math.log(Math.max(sum, Number.MIN_VALUE));
+}
+
+function logSumExpMatrixColumn(data, mapIndex, queryCount, tensorKeyframeCount) {
+  let maxValue = Number.NEGATIVE_INFINITY;
+  for (let queryIndex = 0; queryIndex < queryCount; queryIndex += 1) {
+    const value = Number(data[queryIndex * tensorKeyframeCount + mapIndex]);
+    if (Number.isFinite(value) && value > maxValue) maxValue = value;
+  }
+  if (!Number.isFinite(maxValue)) return Number.POSITIVE_INFINITY;
+  let sum = 0;
+  for (let queryIndex = 0; queryIndex < queryCount; queryIndex += 1) {
+    const value = Number(data[queryIndex * tensorKeyframeCount + mapIndex]);
+    if (Number.isFinite(value)) sum += Math.exp(value - maxValue);
+  }
+  return maxValue + Math.log(Math.max(sum, Number.MIN_VALUE));
+}
+
+function logSigmoid(value) {
+  if (!Number.isFinite(value)) return Number.NEGATIVE_INFINITY;
+  return value >= 0
+    ? -Math.log1p(Math.exp(-value))
+    : value - Math.log1p(Math.exp(value));
 }
 
 async function loadKeyframeImageData(keyframe) {
